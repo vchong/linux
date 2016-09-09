@@ -30,6 +30,7 @@
 
 #include "sha256_glue.h"
 
+//which regs to read out digest, data, num_blocks? read procedure call std
 asmlinkage void sha256_block_data_order(u32 *digest, const void *data,
 					unsigned int num_blks);
 

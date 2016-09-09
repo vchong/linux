@@ -1250,7 +1250,7 @@ static inline int tcrypt_test(const char *alg)
 {
 	int ret;
 
-	ret = alg_test(alg, alg, 0, 0);
+	ret = alg_test(alg, alg, 0, 0); //vvc
 	/* non-fips algs return -EINVAL in fips mode */
 	if (fips_enabled && ret == -EINVAL)
 		ret = 0;

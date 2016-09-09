@@ -13,6 +13,7 @@
 	(((__u16)(x) & (__u16)0x00ffU) << 8) |			\
 	(((__u16)(x) & (__u16)0xff00U) >> 8)))
 
+//vvc
 #define ___constant_swab32(x) ((__u32)(				\
 	(((__u32)(x) & (__u32)0x000000ffUL) << 24) |		\
 	(((__u32)(x) & (__u32)0x0000ff00UL) <<  8) |		\
@@ -28,6 +29,7 @@
 	(((__u64)(x) & (__u64)0x0000ff0000000000ULL) >> 24) |	\
 	(((__u64)(x) & (__u64)0x00ff000000000000ULL) >> 40) |	\
 	(((__u64)(x) & (__u64)0xff00000000000000ULL) >> 56)))
+//vvc
 
 #define ___constant_swahw32(x) ((__u32)(			\
 	(((__u32)(x) & (__u32)0x0000ffffUL) << 16) |		\
@@ -111,10 +113,15 @@ static inline __attribute_const__ __u32 __fswahb32(__u32 val)
  * __swab32 - return a byteswapped 32-bit value
  * @x: value to byteswap
  */
+//#ifdef __HAVE_BUILTIN_BSWAP32__ //vvc check .config file to see if defined
+//#define __swab32(x) (__u32)__builtin_bswap32((__u32)(x))
+//#else
+//if not doing anything with tree vectorize, this boils down to a pointer load and rev32
 #define __swab32(x)				\
 	(__builtin_constant_p((__u32)(x)) ?	\
 	___constant_swab32(x) :			\
 	__fswab32(x))
+//#endif
 
 /**
  * __swab64 - return a byteswapped 64-bit value
@@ -166,7 +173,7 @@ static inline __u16 __swab16p(const __u16 *p)
  */
 static inline __u32 __swab32p(const __u32 *p)
 {
-#ifdef __arch_swab32p
+#ifdef __arch_swab32p //vvc Dan confirmed this not defined
 	return __arch_swab32p(p);
 #else
 	return __swab32(*p);

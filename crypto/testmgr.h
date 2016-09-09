@@ -1091,6 +1091,7 @@ static struct hash_testvec sha224_tv_template[] = {
 
 /*
  * SHA256 test vectors from from NIST
+ * vvc
  */
 #define SHA256_TEST_VECTORS	5
 

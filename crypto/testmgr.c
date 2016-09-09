@@ -375,6 +375,7 @@ static int __test_hash(struct crypto_ahash *tfm, struct hash_testvec *template,
 			goto out;
 		}
 
+		//vvc compare w/ xpctd hash n will print if wrong!!!!!!
 		if (memcmp(result, template[i].digest,
 			   crypto_ahash_digestsize(tfm))) {
 			printk(KERN_ERR "alg: hash: Chunking test %d "
@@ -3662,7 +3663,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 				.count = SHA224_TEST_VECTORS
 			}
 		}
-	}, {
+	}, { //vvc
 		.alg = "sha256",
 		.test = alg_test_hash,
 		.fips_allowed = 1,

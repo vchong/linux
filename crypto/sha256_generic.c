@@ -60,6 +60,7 @@ static inline u32 Maj(u32 x, u32 y, u32 z)
 
 static inline void LOAD_OP(int I, u32 *W, const u8 *input)
 {
+	//the one in access_ok.h is being used
 	W[I] = get_unaligned_be32((__u32 *)input + I);
 }
 
@@ -271,6 +272,7 @@ static struct shash_alg sha256_algs[2] = { {
 	.base		=	{
 		.cra_name	=	"sha256",
 		.cra_driver_name=	"sha256-generic",
+		.cra_priority		= 100,
 		.cra_flags	=	CRYPTO_ALG_TYPE_SHASH,
 		.cra_blocksize	=	SHA256_BLOCK_SIZE,
 		.cra_module	=	THIS_MODULE,

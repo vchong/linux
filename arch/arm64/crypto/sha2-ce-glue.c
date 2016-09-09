@@ -29,6 +29,7 @@ struct sha256_ce_state {
 	u32			finalize;
 };
 
+//which regs to read out sst, srcn blocks? read procedure call std
 asmlinkage void sha2_ce_transform(struct sha256_ce_state *sst, u8 const *src,
 				  int blocks);
 

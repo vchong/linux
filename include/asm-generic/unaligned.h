@@ -8,6 +8,7 @@
 #include <asm/byteorder.h>
 
 /* Set by the arch if it can handle unaligned accesses in hardware. */
+//vvc
 #ifdef CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS
 # include <linux/unaligned/access_ok.h>
 #endif
@@ -20,7 +21,7 @@
 # include <linux/unaligned/generic.h>
 # define get_unaligned	__get_unaligned_le
 # define put_unaligned	__put_unaligned_le
-#elif defined(__BIG_ENDIAN)
+#elif defined(__BIG_ENDIAN) //vvc do reverse if big endian
 # ifndef CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS
 #  include <linux/unaligned/be_struct.h>
 #  include <linux/unaligned/le_byteshift.h>
