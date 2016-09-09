@@ -12,7 +12,7 @@
 
 #define cpu_has_neon()		(!!(elf_hwcap & HWCAP_NEON))
 
-#ifdef __ARM_NEON__
+#ifdef __ARM_NEON__XXX
 
 /*
  * If you are affected by the BUILD_BUG below, it probably means that you are

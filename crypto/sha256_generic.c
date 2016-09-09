@@ -27,6 +27,20 @@
 #include <asm/byteorder.h>
 #include <asm/unaligned.h>
 
+#if 0
+In file included from arch/arm64/include/generated/asm/simd.h:1:0,
+                 from crypto/sha256_generic.c:30:
+include/asm-generic/simd.h:11:127: error: redefinition of 'may_use_simd'
+In file included from arch/arm64/include/generated/asm/simd.h:1:0,
+                 from include/crypto/sha256_base.h:18,
+                 from crypto/sha256_generic.c:26:
+include/asm-generic/simd.h:11:127: note: previous definition of 'may_use_simd' was here
+make[2]: *** [crypto/sha256_generic.o] Error 1
+make[1]: *** [crypto] Error 2
+#endif
+//#include <asm/simd.h>
+#include <asm/neon.h>
+
 const u8 sha224_zero_message_hash[SHA224_DIGEST_SIZE] = {
 	0xd1, 0x4a, 0x02, 0x8c, 0x2a, 0x3a, 0x2b, 0xc9, 0x47,
 	0x61, 0x02, 0xbb, 0x28, 0x82, 0x34, 0xc4, 0x15, 0xa2,
@@ -244,21 +258,74 @@ static void sha256_generic_block_fn(struct sha256_state *sst, u8 const *src,
 int crypto_sha256_update(struct shash_desc *desc, const u8 *data,
 			  unsigned int len)
 {
-	return sha256_base_do_update(desc, data, len, sha256_generic_block_fn);
+	#ifdef CONFIG_KERNEL_MODE_NEON
+	kernel_neon_begin_partial(28);
+	#endif
+	sha256_base_do_update(desc, data, len, sha256_generic_block_fn);
+	#ifdef CONFIG_KERNEL_MODE_NEON
+	kernel_neon_end();
+	#endif
+	return 0;
 }
 EXPORT_SYMBOL(crypto_sha256_update);
 
 static int sha256_final(struct shash_desc *desc, u8 *out)
 {
+	//sha256_base_do_finalize(desc, sha256_generic_block_fn);
+	//NO! This is fine if coming from crypto_sha256_finup, but if not, then we have a dangling kernel_neon_end!
+	//#ifdef CONFIG_KERNEL_MODE_NEON
+	//kernel_neon_end();
+	//#endif
+	//return sha256_base_finish(desc, out);
+
+	//seems better than below since we save 1 context switch if coming from crypto_sha256_finup?
+	//at the expense of an additional if (len) check?
+#if 1
+	return crypto_sha256_finup(desc, NULL, 0, out);
+#else
+	#ifdef CONFIG_KERNEL_MODE_NEON
+	kernel_neon_begin_partial(28);
+	#endif
 	sha256_base_do_finalize(desc, sha256_generic_block_fn);
+	#ifdef CONFIG_KERNEL_MODE_NEON
+	kernel_neon_end();
+	#endif
 	return sha256_base_finish(desc, out);
+#endif
 }
 
 int crypto_sha256_finup(struct shash_desc *desc, const u8 *data,
 			unsigned int len, u8 *hash)
 {
+	//#ifdef CONFIG_KERNEL_MODE_NEON
+	//kernel_neon_begin_partial(28);
+	//#endif
+	//sha256_base_do_update(desc, data, len, sha256_generic_block_fn);
+	//return sha256_final(desc, hash);
+
+	//seems better than below since we save 1 context switch if coming from crypto_sha256_finup?
+	//at the expense of an additional if (len) check?
+#if 1
+	#ifdef CONFIG_KERNEL_MODE_NEON
+	kernel_neon_begin_partial(28);
+	#endif
+	if (len)
+		sha256_base_do_update(desc, data, len, sha256_generic_block_fn);
+	sha256_base_do_finalize(desc, sha256_generic_block_fn);
+	#ifdef CONFIG_KERNEL_MODE_NEON
+	kernel_neon_end();
+	#endif
+	return sha256_base_finish(desc, hash);
+#else
+	#ifdef CONFIG_KERNEL_MODE_NEON
+	kernel_neon_begin_partial(28);
+	#endif
 	sha256_base_do_update(desc, data, len, sha256_generic_block_fn);
+	#ifdef CONFIG_KERNEL_MODE_NEON
+	kernel_neon_end();
+	#endif
 	return sha256_final(desc, hash);
+#endif
 }
 EXPORT_SYMBOL(crypto_sha256_finup);
 

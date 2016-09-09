@@ -15,6 +15,9 @@
 
 #include <asm/unaligned.h>
 
+#include <asm/simd.h>
+#include <asm/neon.h>
+
 typedef void (sha256_block_fn)(struct sha256_state *sst, u8 const *src,
 			       int blocks);
 
@@ -22,6 +25,9 @@ static inline int sha224_base_init(struct shash_desc *desc)
 {
 	struct sha256_state *sctx = shash_desc_ctx(desc);
 
+	#ifdef CONFIG_KERNEL_MODE_NEON
+	kernel_neon_begin_partial(28);
+	#endif
 	sctx->state[0] = SHA224_H0;
 	sctx->state[1] = SHA224_H1;
 	sctx->state[2] = SHA224_H2;
@@ -31,6 +37,9 @@ static inline int sha224_base_init(struct shash_desc *desc)
 	sctx->state[6] = SHA224_H6;
 	sctx->state[7] = SHA224_H7;
 	sctx->count = 0;
+	#ifdef CONFIG_KERNEL_MODE_NEON
+	kernel_neon_end();
+	#endif
 
 	return 0;
 }
@@ -39,6 +48,9 @@ static inline int sha256_base_init(struct shash_desc *desc)
 {
 	struct sha256_state *sctx = shash_desc_ctx(desc);
 
+	#ifdef CONFIG_KERNEL_MODE_NEON
+	kernel_neon_begin_partial(28);
+	#endif
 	sctx->state[0] = SHA256_H0;
 	sctx->state[1] = SHA256_H1;
 	sctx->state[2] = SHA256_H2;
@@ -48,6 +60,9 @@ static inline int sha256_base_init(struct shash_desc *desc)
 	sctx->state[6] = SHA256_H6;
 	sctx->state[7] = SHA256_H7;
 	sctx->count = 0;
+	#ifdef CONFIG_KERNEL_MODE_NEON
+	kernel_neon_end();
+	#endif
 
 	return 0;
 }
