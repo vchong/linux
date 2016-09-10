@@ -105,6 +105,8 @@ static int __init sha256_mod_init(void)
 
 		if (res < 0)
 			crypto_unregister_shashes(algs, ARRAY_SIZE(algs));
+	} else {
+		printk("cpu has no neon\n");
 	}
 
 	return res;
@@ -117,6 +119,8 @@ static void __exit sha256_mod_fini(void)
 	if (IS_ENABLED(CONFIG_KERNEL_MODE_NEON) && cpu_has_neon())
 		crypto_unregister_shashes(sha256_neon_algs,
 					  ARRAY_SIZE(sha256_neon_algs));
+	else
+		printk("cpu has no neon\n");
 }
 
 module_init(sha256_mod_init);

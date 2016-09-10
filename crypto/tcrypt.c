@@ -1061,6 +1061,7 @@ static int do_test(const char *alg, u32 type, u32 mask, int m)
 
 	case 6:
 		ret += tcrypt_test("sha256");
+		printk("6: sha256\n");
 		break;
 
 	case 7:
@@ -1279,6 +1280,7 @@ static int do_test(const char *alg, u32 type, u32 mask, int m)
 
 	case 102:
 		ret += tcrypt_test("hmac(sha256)");
+		printk("102: hmac(sha256)\n");
 		break;
 
 	case 103:
@@ -2057,7 +2059,7 @@ static int __init tcrypt_mod_init(void)
 	err = do_test(alg, type, mask, mode);
 
 	if (err) {
-		printk(KERN_ERR "tcrypt: one or more tests failed!\n");
+		printk(KERN_ERR "tcrypt: one or more tests failed! err=%d\n", err);
 		goto err_free_tv;
 	}
 
