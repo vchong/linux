@@ -14,11 +14,13 @@
 *.o.*
 *.a
 *.s
+*.s.*
 *.ko
 *.so
 *.so.dbg
 *.mod.c
 *.i
+*.i.*
 *.lst
 *.symtypes
 *.order
