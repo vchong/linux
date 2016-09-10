@@ -83,6 +83,71 @@ static inline void BLEND_OP(int I, u32 *W)
 	W[I] = s1(W[I-2]) + W[I-7] + s0(W[I-15]) + W[I-16];
 }
 
+static const u32 k[64] =
+			{0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
+			 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+			 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+			 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+			 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc,
+			 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+			 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
+			 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+			 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+			 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+			 0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3,
+			 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+			 0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5,
+			 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+			 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+			 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2};
+
+static void sha256_transform_new(u32 *state, const u8 *input) __maybe_unused
+{
+	u32 a, b, c, d, e, f, g, h, t1, t2;
+	u32 W[64];
+	int i;
+
+	/* load the input */
+	for (i = 0; i < 16; i++)
+		LOAD_OP(i, W, input);
+
+	/* now blend */
+	for (i = 16; i < 64; i++)
+		BLEND_OP(i, W);
+
+	/* load the state into our registers */
+	a=state[0];  b=state[1];  c=state[2];  d=state[3];
+	e=state[4];  f=state[5];  g=state[6];  h=state[7];
+
+	/* now iterate */
+	for (i = 0; i < 8; i++)
+	{
+		t1 = h + e1(e) + Ch(e,f,g) + k[i*8] + W[i*8];
+		t2 = e0(a) + Maj(a,b,c);    d+=t1;    h=t1+t2;
+		t1 = g + e1(d) + Ch(d,e,f) + k[i*8+1] + W[i*8+1];
+		t2 = e0(h) + Maj(h,a,b);    c+=t1;    g=t1+t2;
+		t1 = f + e1(c) + Ch(c,d,e) + k[i*8+2] + W[i*8+2];
+		t2 = e0(g) + Maj(g,h,a);    b+=t1;    f=t1+t2;
+		t1 = e + e1(b) + Ch(b,c,d) + k[i*8+3] + W[i*8+3];
+		t2 = e0(f) + Maj(f,g,h);    a+=t1;    e=t1+t2;
+		t1 = d + e1(a) + Ch(a,b,c) + k[i*8+4] + W[i*8+4];
+		t2 = e0(e) + Maj(e,f,g);    h+=t1;    d=t1+t2;
+		t1 = c + e1(h) + Ch(h,a,b) + k[i*8+5] + W[i*8+5];
+		t2 = e0(d) + Maj(d,e,f);    g+=t1;    c=t1+t2;
+		t1 = b + e1(g) + Ch(g,h,a) + k[i*8+6] + W[i*8+6];
+		t2 = e0(c) + Maj(c,d,e);    f+=t1;    b=t1+t2;
+		t1 = a + e1(f) + Ch(f,g,h) + k[i*8+7] + W[i*8+7];
+		t2 = e0(b) + Maj(b,c,d);    e+=t1;    a=t1+t2;
+	}
+
+	state[0] += a; state[1] += b; state[2] += c; state[3] += d;
+	state[4] += e; state[5] += f; state[6] += g; state[7] += h;
+
+	/* clear any sensitive info... */
+	a = b = c = d = e = f = g = h = t1 = t2 = 0;
+	memzero_explicit(W, 64 * sizeof(u32));
+}
+
 static void sha256_transform(u32 *state, const u8 *input)
 {
 	u32 a, b, c, d, e, f, g, h, t1, t2;
