@@ -40,6 +40,45 @@
 while (($output=shift) && ($output!~/^\w[\w\-]*\.\w+$/)) {}
 open STDOUT,">$output";
 
+#change to aarch64 32b registers
+#ptrs r 64b in aarch64 but if pointing to u32, hv to store it in 32b regs
+#ctx = 64b val
+#inp = 64b val but when u save t4 in r1 most probably 32b
+#both r ptrs, once dereferenced, probably need to do 32b loads
+#the rest shld b 32b vals
+
+# void sha2_ce_transform(struct sha256_ce_state *sst, u8 const *src,
+#			  int blocks)
+#
+#which regs to read out sst, srcn blocks? read procedure call std
+#x0 x1 w2
+#based on sha2-ce-core arm64 vs sha2-ce-core arm
+
+#r0 parameter blk
+#$ctx="x0";	$t0="x0";
+#$inp="x1";	$t4="x1";
+#$len="x2";	$t1="x2";
+#$T1="x3";	$t3="x3";
+#$A="x4";
+#$B="x5";
+#$C="x6";
+#$D="x7";
+#$E="x8";
+#$F="x9";
+#$G="x10";
+#$H="x11";
+#@V=($A,$B,$C,$D,$E,$F,$G,$H);
+#$t2="x12";
+############	r13 is stack pointer
+#$Ktbl="x14";
+############	r15 is program counter
+
+#void sha256_block_data_order_neon(u32 *digest, const void *data,
+#					     unsigned int num_blks);
+#
+#which regs to read out digest, data, num_blks? read procedure call std
+#r0 r1 r2
+
 $ctx="r0";	$t0="r0";
 $inp="r1";	$t4="r1";
 $len="r2";	$t1="r2";
@@ -54,7 +93,9 @@ $G="r10";
 $H="r11";
 @V=($A,$B,$C,$D,$E,$F,$G,$H);
 $t2="r12";
+############	r13 is stack pointer
 $Ktbl="r14";
+############	r15 is program counter
 
 @Sigma0=( 2,13,22);
 @Sigma1=( 6,11,25);
@@ -93,6 +134,9 @@ $code.=<<___ if ($i<16);
 #endif
 ___
 $code.=<<___;
+#if 0
+	@ BODY_00_15 - 2
+#endif
 	ldr	$t2,[$Ktbl],#4			@ *K256++
 	add	$h,$h,$t1			@ h+=X[i]
 	str	$t1,[sp,#`$i%16`*4]
@@ -150,11 +194,17 @@ $code.=<<___;
 	add	$t1,$t1,$t2
 	eor	$t0,$t0,$e,ror#`$Sigma1[2]-$Sigma1[0]`	@ Sigma1(e)
 	add	$t1,$t1,$t4			@ X[i]
+#if 0
+	@ BODY_16_XX calls BODY_00_15 i=$i
+#endif
 ___
 	&BODY_00_15(@_);
 }
 
 $code=<<___;
+#if 0
+	@ head
+#endif
 #ifndef __KERNEL__
 # include "arm_arch.h"
 #else
@@ -232,10 +282,13 @@ sha256_block_data_order:
 	eor	$t3,$B,$C		@ magic
 	eor	$t2,$t2,$t2
 ___
-for($i=0;$i<16;$i++)	{ &BODY_00_15($i,@V); unshift(@V,pop(@V)); }
+for($i=0;$i<16;$i++)	{ $code .= "#if 0\nbf Lrounds_16_xx - call BODY_00_15 $i\n#endif\n"; &BODY_00_15($i,@V); unshift(@V,pop(@V)); }
 $code.=".Lrounds_16_xx:\n";
-for (;$i<32;$i++)	{ &BODY_16_XX($i,@V); unshift(@V,pop(@V)); }
+for (;$i<32;$i++)	{ $code .= "#if 0\nLrounds_16_xx call BODY_16_XX $i\n#endif\n"; &BODY_16_XX($i,@V); unshift(@V,pop(@V)); }
 $code.=<<___;
+#if 0
+	@ after .Lrounds_16_xx
+#endif
 #if __ARM_ARCH__>=7
 	ite	eq			@ Thumb2 thing, sanity check in ARM
 #endif
@@ -282,30 +335,48 @@ ___
 #
 {{{
 my @X=map("q$_",(0..3));
+#my @X=map("v$_",(16..19));
 my ($T0,$T1,$T2,$T3,$T4,$T5)=("q8","q9","q10","q11","d24","d25");
+#does NOT work for some reason
+#my ($T0,$T1,$T2,$T3,$T4,$T5)=("v0","v1","v2","v3","w24","w25");
 my $Xfer=$t4;
 my $j=0;
 
-sub Dlo()   { shift=~m|q([1]?[0-9])|?"d".($1*2):"";     }
-sub Dhi()   { shift=~m|q([1]?[0-9])|?"d".($1*2+1):"";   }
+sub Dlo()
+{
+  $code .= "#if 0\n@ Dlo\n#endif\n";
+  shift=~m|q([1]?[0-9])|?"d".($1*2):"";
+}
+
+sub Dhi()
+{
+  $code .= "#if 0\n@ Dhi\n#endif\n";
+  shift=~m|q([1]?[0-9])|?"d".($1*2+1):"";
+}
 
 sub AUTOLOAD()          # thunk [simplified] x86-style perlasm
-{ my $opcode = $AUTOLOAD; $opcode =~ s/.*:://; $opcode =~ s/_/\./;
+{
+  #$code .= "#if 0\n@ AUTOLOAD\n#endif\n";
+  my $opcode = $AUTOLOAD; $opcode =~ s/.*:://; $opcode =~ s/_/\./;
   my $arg = pop;
     $arg = "#$arg" if ($arg*1 eq $arg);
     $code .= "\t$opcode\t".join(',',@_,$arg)."\n";
 }
 
 sub Xupdate()
-{ use integer;
+{
+  $code .= "#if 0\n@ Xupdate\n#endif\n";
+  use integer;
   my $body = shift;
   my @insns = (&$body,&$body,&$body,&$body);
   my ($a,$b,$c,$d,$e,$f,$g,$h);
 
+    $code .= "#if 0\n@ X[1..4]\n#endif\n";
 	&vext_8		($T0,@X[0],@X[1],4);	# X[1..4]
 	 eval(shift(@insns));
 	 eval(shift(@insns));
 	 eval(shift(@insns));
+    $code .= "#if 0\n@ X[9..12]\n#endif\n";
 	&vext_8		($T1,@X[2],@X[3],4);	# X[9..12]
 	 eval(shift(@insns));
 	 eval(shift(@insns));
@@ -313,6 +384,7 @@ sub Xupdate()
 	&vshr_u32	($T2,$T0,$sigma0[0]);
 	 eval(shift(@insns));
 	 eval(shift(@insns));
+    $code .= "#if 0\n@ X[0..3] += X[9..12]\n#endif\n";
 	&vadd_i32	(@X[0],@X[0],$T1);	# X[0..3] += X[9..12]
 	 eval(shift(@insns));
 	 eval(shift(@insns));
@@ -334,6 +406,7 @@ sub Xupdate()
 	  &vshr_u32	($T4,&Dhi(@X[3]),$sigma1[0]);
 	 eval(shift(@insns));
 	 eval(shift(@insns));
+    $code .= "#if 0\n@ sigma0(X[1..4])\n#endif\n";
 	&veor		($T1,$T1,$T3);		# sigma0(X[1..4])
 	 eval(shift(@insns));
 	 eval(shift(@insns));
@@ -343,6 +416,7 @@ sub Xupdate()
 	  &vshr_u32	($T5,&Dhi(@X[3]),$sigma1[2]);
 	 eval(shift(@insns));
 	 eval(shift(@insns));
+    $code .= "#if 0\n@ X[0..3] += sigma0(X[1..4])\n#endif\n";
 	&vadd_i32	(@X[0],@X[0],$T1);	# X[0..3] += sigma0(X[1..4])
 	 eval(shift(@insns));
 	 eval(shift(@insns));
@@ -355,9 +429,11 @@ sub Xupdate()
 	  &vsli_32	($T4,&Dhi(@X[3]),32-$sigma1[1]);
 	 eval(shift(@insns));
 	 eval(shift(@insns));
+      $code .= "#if 0\n@ sigma1(X[14..15])\n#endif\n";
 	  &veor		($T5,$T5,$T4);		# sigma1(X[14..15])
 	 eval(shift(@insns));
 	 eval(shift(@insns));
+    $code .= "#if 0\n@ X[0..1] += sigma1(X[14..15])\n#endif\n";
 	&vadd_i32	(&Dlo(@X[0]),&Dlo(@X[0]),$T5);# X[0..1] += sigma1(X[14..15])
 	 eval(shift(@insns));
 	 eval(shift(@insns));
@@ -382,9 +458,11 @@ sub Xupdate()
 	  &vsli_32	($T4,&Dlo(@X[0]),32-$sigma1[1]);
 	 eval(shift(@insns));
 	 eval(shift(@insns));
+	  $code .= "#if 0\n@ sigma1(X[16..17])\n#endif\n";
 	  &veor		($T5,$T5,$T4);		# sigma1(X[16..17])
 	 eval(shift(@insns));
 	 eval(shift(@insns));
+	$code .= "#if 0\n@ X[2..3] += sigma1(X[16..17])\n#endif\n";
 	&vadd_i32	(&Dhi(@X[0]),&Dhi(@X[0]),$T5);# X[2..3] += sigma1(X[16..17])
 	 eval(shift(@insns));
 	 eval(shift(@insns));
@@ -394,11 +472,14 @@ sub Xupdate()
 	 eval(shift(@insns));
 	 eval(shift(@insns));
 
+	$code .= "#if 0\n'rotate' X[]\n#endif\n";
 	push(@X,shift(@X));		# "rotate" X[]
 }
 
 sub Xpreload()
-{ use integer;
+{
+  $code .= "#if 0\n@ Xpreload\n#endif\n";
+  use integer;
   my $body = shift;
   my @insns = (&$body,&$body,&$body,&$body);
   my ($a,$b,$c,$d,$e,$f,$g,$h);
@@ -418,39 +499,45 @@ sub Xpreload()
 	 eval(shift(@insns));
 	 eval(shift(@insns));
 	&vadd_i32	($T0,$T0,@X[0]);
+	 $code .= "#if 0\n@ remaining insn\n#endif\n";
 	 foreach (@insns) { eval; }	# remaining instructions
 	&vst1_32	("{$T0}","[$Xfer,:128]!");
 
+	$code .= "#if 0\n@ Xpreload 'rotate' X[]\n#endif\n";
 	push(@X,shift(@X));		# "rotate" X[]
 }
 
+# TODO: How to insert comments below into generated code
 sub body_00_15 () {
 	(
 	'($a,$b,$c,$d,$e,$f,$g,$h)=@V;'.
-	'&add	($h,$h,$t1)',			# h+=X[i]+K[i]
+	'&add	($h,$h,$t1," // h+=X[i]+K[i]")',			# h+=X[i]+K[i]
 	'&eor	($t1,$f,$g)',
 	'&eor	($t0,$e,$e,"ror#".($Sigma1[1]-$Sigma1[0]))',
-	'&add	($a,$a,$t2)',			# h+=Maj(a,b,c) from the past
+	'&add	($a,$a,$t2," // h+=Maj(a,b,c) from the past")',			# h+=Maj(a,b,c) from the past
 	'&and	($t1,$t1,$e)',
-	'&eor	($t2,$t0,$e,"ror#".($Sigma1[2]-$Sigma1[0]))',	# Sigma1(e)
+	'&eor	($t2,$t0,$e,"ror#".($Sigma1[2]-$Sigma1[0])," // Sigma1(e)")',	# Sigma1(e)
 	'&eor	($t0,$a,$a,"ror#".($Sigma0[1]-$Sigma0[0]))',
-	'&eor	($t1,$t1,$g)',			# Ch(e,f,g)
-	'&add	($h,$h,$t2,"ror#$Sigma1[0]")',	# h+=Sigma1(e)
-	'&eor	($t2,$a,$b)',			# a^b, b^c in next round
-	'&eor	($t0,$t0,$a,"ror#".($Sigma0[2]-$Sigma0[0]))',	# Sigma0(a)
-	'&add	($h,$h,$t1)',			# h+=Ch(e,f,g)
+	'&eor	($t1,$t1,$g," // Ch(e,f,g)")',			# Ch(e,f,g)
+	'&add	($h,$h,$t2,"ror#$Sigma1[0]"," // h+=Sigma1(e)")',	# h+=Sigma1(e)
+	'&eor	($t2,$a,$b," // a^b, b^c in next round")',			# a^b, b^c in next round
+	'&eor	($t0,$t0,$a,"ror#".($Sigma0[2]-$Sigma0[0])," // Sigma0(a)")',	# Sigma0(a)
+	'&add	($h,$h,$t1," // h+=Ch(e,f,g)")',			# h+=Ch(e,f,g)
 	'&ldr	($t1,sprintf "[sp,#%d]",4*(($j+1)&15))	if (($j&15)!=15);'.
 	'&ldr	($t1,"[$Ktbl]")				if ($j==15);'.
 	'&ldr	($t1,"[sp,#64]")			if ($j==31)',
-	'&and	($t3,$t3,$t2)',			# (b^c)&=(a^b)
-	'&add	($d,$d,$h)',			# d+=h
-	'&add	($h,$h,$t0,"ror#$Sigma0[0]");'.	# h+=Sigma0(a)
-	'&eor	($t3,$t3,$b)',			# Maj(a,b,c)
+	'&and	($t3,$t3,$t2," // (b^c)&=(a^b)")',			# (b^c)&=(a^b)
+	'&add	($d,$d,$h," // d+=h")',			# d+=h
+	'&add	($h,$h,$t0,"ror#$Sigma0[0]"," // h+=Sigma0(a)");'.	# h+=Sigma0(a)
+	'&eor	($t3,$t3,$b," // Maj(a,b,c)")',			# Maj(a,b,c)
 	'$j++;	unshift(@V,pop(@V)); ($t2,$t3)=($t3,$t2);'
 	)
 }
 
 $code.=<<___;
+#if 0
+	@ start neon head
+#endif
 #if __ARM_MAX_ARCH__>=7
 .arch	armv7-a
 .fpu	neon
@@ -473,7 +560,7 @@ sha256_block_data_order_neon:
 	vld1.8		{@X[1]},[$inp]!
 	vld1.8		{@X[2]},[$inp]!
 	vld1.8		{@X[3]},[$inp]!
-	vld1.32		{$T0},[$Ktbl,:128]!
+	vld1.32		{$T0},[$Ktbl,:128]! @ bits
 	vld1.32		{$T1},[$Ktbl,:128]!
 	vld1.32		{$T2},[$Ktbl,:128]!
 	vld1.32		{$T3},[$Ktbl,:128]!
@@ -486,6 +573,7 @@ sha256_block_data_order_neon:
 	str		$len,[sp,#72]
 	vrev32.8	@X[3],@X[3]
 	str		$t2,[sp,#76]		@ save original sp
+
 	vadd.i32	$T0,$T0,@X[0]
 	vadd.i32	$T1,$T1,@X[1]
 	vst1.32		{$T0},[$Xfer,:128]!
@@ -510,6 +598,9 @@ ___
 	&Xupdate(\&body_00_15);
 	&Xupdate(\&body_00_15);
 $code.=<<___;
+#if 0
+	@ after 4 Xupdates
+#endif
 	teq	$t1,#0				@ check for K256 terminator
 	ldr	$t1,[sp,#0]
 	sub	$Xfer,$Xfer,#64
@@ -534,6 +625,9 @@ ___
 	&Xpreload(\&body_00_15);
 	&Xpreload(\&body_00_15);
 $code.=<<___;
+#if 0
+	@ after 4 Xpreloads
+#endif
 	ldr	$t0,[$t1,#0]
 	add	$A,$A,$t2			@ h+=Maj(a,b,c) from the past
 	ldr	$t2,[$t1,#4]
@@ -581,6 +675,9 @@ my ($W0,$W1,$ABCD_SAVE,$EFGH_SAVE)=map("q$_",(12..15));
 my $Ktbl="r3";
 
 $code.=<<___;
+#if 0
+	@ ARMv8 stuff
+#endif
 #if __ARM_MAX_ARCH__>=7 && !defined(__KERNEL__)
 
 # ifdef __thumb2__
@@ -616,6 +713,9 @@ sha256_block_data_order_armv8:
 ___
 for($i=0;$i<12;$i++) {
 $code.=<<___;
+#if 0
+	@ $i+1 of 12 rounds
+#endif
 	vld1.32		{$W1},[$Ktbl]!
 	vadd.i32	$W0,$W0,@MSG[0]
 	sha256su0	@MSG[0],@MSG[1]
@@ -627,6 +727,9 @@ ___
 	($W0,$W1)=($W1,$W0);	push(@MSG,shift(@MSG));
 }
 $code.=<<___;
+#if 0
+	@ below 12 rounds
+#endif
 	vld1.32		{$W1},[$Ktbl]!
 	vadd.i32	$W0,$W0,@MSG[0]
 	vmov		$abcd,$ABCD
@@ -664,6 +767,9 @@ $code.=<<___;
 ___
 }}}
 $code.=<<___;
+#if 0
+	@ ARMv8 tail
+#endif
 .asciz  "SHA256 block transform for ARMv4/NEON/ARMv8, CRYPTOGAMS by <appro\@openssl.org>"
 .align	2
 #if __ARM_MAX_ARCH__>=7 && !defined(__KERNEL__)
@@ -684,6 +790,7 @@ close SELF;
 	"sha256su0"	=> 0xf3ba03c0,	"sha256su1"	=> 0xf3200c40	);
 
     sub unsha256 {
+    $code .= "#if 0\n@ unsha256\n#endif\n";
 	my ($mnemonic,$arg)=@_;
 
 	if ($arg =~ m/q([0-9]+)(?:,\s*q([0-9]+))?,\s*q([0-9]+)/o) {
@@ -701,6 +808,10 @@ close SELF;
     }
 }
 
+#transformation of opcodes
+#sub non-existent v8 opcodes with existent ones
+#turn all vector opcodes to non-vectored, e.g. remove 'v' fr all opcodes that are vectored
+
 foreach (split($/,$code)) {
 
 	s/\`([^\`]*)\`/eval $1/geo;
@@ -709,6 +820,16 @@ foreach (split($/,$code)) {
 
 	s/\bret\b/bx	lr/go		or
 	s/\bbx\s+lr\b/.word\t0xe12fff1e/go;	# make it possible to compile with -march=armv4
+
+	s/, \/\// \/\//g;
+	#s/vld1/ld1/g; #nope
+	#s/vrev32/rev32/g;
+	#s/vadd/add/g;
+	#s/vst1/st1/g; #nope
+	#s/vext/ext/g; #nope
+	#s/vshr/shr/g; #ushr?
+	#s/vsli/sli/g; #shl?
+	#s/veor/eor/g;
 
 	print $_,"\n";
 }
