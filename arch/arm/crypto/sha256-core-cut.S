@@ -49,174 +49,149 @@ ENTRY(sha256_neon_transform)
 
 	//ldmia, stmia no equivs in aarch64!
 
-		//stmdb	sp!,{r4-r12,lr}
+	stmdb	sp!,{r4-r12,lr}
 
-		sub x11,sp,#96 // sub	r11,sp,#16*4+16
-		adr	x14,K256
-		bic x11,x11,#15 	// align for 128-bit stores - this will move up sp pointer a bit higher later in mv sp, x11
-		mov x12,sp
-		mov sp,x11			// alloca
-		add x2,x1,x2,lsl#6	// len to point at the end of inp, len in bytes = num_blks * 64B per blk, * 64 = lsl6
+	sub	x11,sp,#16*4+16
+	adrl	x14,K256
+	bic	x11,x11,#15		@ align for 128-bit stores
+	mov	x12,sp
+	mov	sp,x11			@ alloca
+	add	x2,x1,x2,lsl#6	@ len to point at the end of inp
 
-		/* load input - blk1 */
-		//vld1.8		{q0},[x1]!
-		//vld1.8		{q1},[x1]!
-		//vld1.8		{q2},[x1]!
-		//vld1.8		{q3},[x1]!
-		ld1 		{v16.4s-v19.4s}, [x1], #64	// q0-3 = v16-19 = ce v16-19
+	/* load input - blk1 */
+	vld1.8		{q0},[x1]!
+	vld1.8		{q1},[x1]!
+	vld1.8		{q2},[x1]!
+	vld1.8		{q3},[x1]!
 
-		// STR{<c>}{<q>} <Rt>, [<Rn> {, #+/-<imm>}]  Offset: index==TRUE, wback==FALSE
-		// STR{<c>}{<q>} <Rt>, [<Rn>, #+/-<imm>]!	 Pre-indexed: index==TRUE, wback==TRUE
-	 	// STR{<c>}{<q>} <Rt>, [<Rn>], #+/-<imm> Post-indexed: index==FALSE, wback==TRUE
+	// STR{<c>}{<q>} <Rt>, [<Rn> {, #+/-<imm>}]  Offset: index==TRUE, wback==FALSE
+	// STR{<c>}{<q>} <Rt>, [<Rn>, #+/-<imm>]!	 Pre-indexed: index==TRUE, wback==TRUE
+ 	// STR{<c>}{<q>} <Rt>, [<Rn>], #+/-<imm> Post-indexed: index==FALSE, wback==TRUE
 
-		/* load 1st 16 round constants */
-		//vld1.32 	{q8},[x14,:128]! // 128b = 16 bytes, 4 lanes * 32b per lane
-		//vld1.32 	{q9},[x14,:128]! // 128b = 16 bytes
-		//vld1.32 	{q10},[x14,:128]! // 128b = 16 bytes
-		//vld1.32 	{q11},[x14,:128]! // 128b = 16 bytes
-		ld1 		{v0.4s-v3.4s}, [x14], #64	// 64 bytes // q8-11 = v0-3 = ce v0-3
+	/* load 1st 16 round constants */
+	vld1.32 	{q8},[x14,:128]! // 128b = 16 bytes, 4 lanes * 32b per lane
+	vld1.32 	{q9},[x14,:128]! // 128b = 16 bytes
+	vld1.32 	{q10},[x14,:128]! // 128b = 16 bytes
+	vld1.32 	{q11},[x14,:128]! // 128b = 16 bytes
+	vrev32.8	q0,q0		@ yes, even on
+	str		x0,[sp,#64]
+	vrev32.8	q1,q1		@ big-endian
+	str		x1,[sp,#68]
+	mov		x1,sp
+	vrev32.8	q2,q2
+	str		x2,[sp,#72]
+	vrev32.8	q3,q3
+	str		x12,[sp,#76]		@ save original sp
 
-		//why the str's?
-		CPU_LE( rev32		v16.16b, v16.16b	) // yes, even on
-		str 	x0,[sp,#64]
-		CPU_LE( rev32		v17.16b, v17.16b	) // big-endian
-		str 	x1,[sp,#72] // ori 68
-		mov 	x1,sp
-		CPU_LE( rev32		v18.16b, v18.16b	)
-		str 	x2,[sp,#80] // ori 72
-		CPU_LE( rev32		v19.16b, v19.16b	)
-		str 	x12,[sp,#88] // ori 76 // save original sp
+	vadd.i32	q8,q8,q0
+	vadd.i32	q9,q9,q1
+	vst1.32		{q8},[x1,:128]!
+	vadd.i32	q10,q10,q2
+	vst1.32		{q9},[x1,:128]!
+	vadd.i32	q11,q11,q3
+	vst1.32		{q10},[x1,:128]!
+	vst1.32		{q11},[x1,:128]!
 
-		/* round constants + input */
-		add			v0.4s,v0.4s,v16.4s
-		add			v1.4s,v1.4s,v17.4s
-		st1			{v0.4s},[x1],#16
-		add			v2.4s,v2.4s,v18.4s
-		st1			{v1.4s},[x1],#16
-		add			v3.4s,v3.4s,v19.4s
-		st1			{v2.4s},[x1],#16
-		st1			{v3.4s},[x1],#16
+	ldmia		x0,{x4-x11}
+	sub		x1,x1,#64
+	ldr		x2,[sp,#0]
+	eor		x12,x12,x12
+	eor		x3,x5,x6
+	b		.L_00_48
 
-		/* load state */
-		//ldmia		x0,{x4-x11}
-		ldp w4, w5, [x0]
-		ldp w6, w7, [x0, #8]
-		ldp w8, w9, [x0, #16]
-		ldp w10, w11, [x0, #24]
-
-		//point to next msg block? memory goes down?
-		//or point to start of msg blk again?
-		//or alloc space for msg?
-		sub 	x1,x1,#64
-		//wat's loaded?
-		ldr 	x2,[sp,#0]
-		eor 	x12,x12,x12 //zero out register?
-		eor 	x3,x5,x6
-		b		.L_00_48
-	
-	.align	4
-	.L_00_48:
+.align	4
+.L_00_48:
 #if 0
 @ Xupdate
 #endif
 #if 0
 @ X[1..4]
 #endif
-		ext	v0.16b,v16.16b,v17.16b,#4
+	vext.8	q8,q0,q1,#4
 	add	x11,x11,x2 // h+=X[i]+K[i]
-		eor x2,x9,x10
-		eor w0,w8,w8,ror#5
+	eor	x2,x9,x10
+	eor	x0,x8,x8,ror#5
 #if 0
 @ X[9..12]
 #endif
-		ext	v1.16b,v18.16b,v19.16b,#4
+	vext.8	q9,q2,q3,#4
 	add	x4,x4,x12 // h+=Maj(a,b,c) from the past
-		and x2,x2,x8
-	eor	w12,w0,w8,ror#19 // Sigma1(e)
-		ushr	v2.4s,v0.4s,#7
-		eor w0,w4,w4,ror#11
+	and	x2,x2,x8
+	eor	x12,x0,x8,ror#19 // Sigma1(e)
+	vshr.u32	q10,q8,#7
+	eor	x0,x4,x4,ror#11
 	eor	x2,x2,x10 // Ch(e,f,g)
 #if 0
 @ X[0..3] += X[9..12]
 #endif
-		add	v16.4s,v16.4s,v1.4s
-	add	w11,w11,w12,ror#6 // h+=Sigma1(e)
+	vadd.i32	q0,q0,q9
+	add	x11,x11,x12,ror#6 // h+=Sigma1(e)
 	eor	x12,x4,x5 // a^b, b^c in next round
-		ushr	v1.4s,v0.4s,#3
-	eor	w0,w0,w4,ror#20 // Sigma0(a)
+	vshr.u32	q9,q8,#3
+	eor	x0,x0,x4,ror#20 // Sigma0(a)
 	add	x11,x11,x2 // h+=Ch(e,f,g)
-		sli v2.4s,v0.4s,#25
-		ldr x2,[sp,#4]
+	vsli.32	q10,q8,#25
+	ldr	x2,[sp,#4]
 	and	x3,x3,x12 // (b^c)&=(a^b)
-		ushr	v3.4s,v0.4s,#18
+	vshr.u32	q11,q8,#18
 	add	x7,x7,x11 // d+=h
-	add	w11,w11,w0,ror#2 // h+=Sigma0(a)
+	add	x11,x11,x0,ror#2 // h+=Sigma0(a)
 	eor	x3,x3,x5 // Maj(a,b,c)
-		eor	v1.16b,v1.16b,v2.16b // DOUBLE CHECK THIS!
+	veor	q9,q9,q10
 	add	x10,x10,x2 // h+=X[i]+K[i]
-		sli v3.4s,v0.4s,#14
-		eor x2,x8,x9
-		eor w0,w7,w7,ror#5
+	vsli.32	q11,q8,#14
+	eor	x2,x8,x9
+	eor	x0,x7,x7,ror#5
 #if 0
 @ Dhi
 #endif
-		// d7 = q3 hi = v19 hi = v20 lo (tmp)
-		// swap upper and lower 64-bit of v19 into v20 = d7
-		// ext.16b v20, v19, v19, #8
-		ext v20.16b,v19.16b,v19.16b,#8 // 8*8=64 bits that we wanna swap
-		ushr	v4.2s,v20.2s,#17
+	vshr.u32	d24,d7,#17
 	add	x11,x11,x3 // h+=Maj(a,b,c) from the past
-		and x2,x2,x7
+	and	x2,x2,x7
 #if 0
 @ sigma0(X[1..4])
 #endif
-		eor	v1.16b,v1.16b,v3.16b
-	eor	w3,w0,w7,ror#19 // Sigma1(e)
-		eor w0,w11,w11,ror#11
+	veor	q9,q9,q11
+	eor	x3,x0,x7,ror#19 // Sigma1(e)
+	eor	x0,x11,x11,ror#11
 #if 0
 @ Dhi
 #endif
-		sli v4.2s,v20.2s,#15
+	vsli.32	d24,d7,#15
 	eor	x2,x2,x9 // Ch(e,f,g)
-	add	w10,w10,w3,ror#6 // h+=Sigma1(e)
+	add	x10,x10,x3,ror#6 // h+=Sigma1(e)
 #if 0
 @ Dhi
 #endif
-		// d25 = q12 hi = v4 hi = v5 lo (tmp)
-		// swap upper and lower 64-bit of v4 into v5 = d25
-		ext v5.16b,v4.16b,v4.16b,#8 // 8*8=64 bits that we wanna swap
-		ushr v5.2s,v20.2s,#10
-		// put proper values back from tmp (v5 lo) to v4 hi 
-		ext v4.16b,v5.16b,v5.16b,#8 // 8*8=64 bits that we wanna swap
-		
+	vshr.u32	d25,d7,#10
 	eor	x3,x11,x4 // a^b, b^c in next round
-	eor	w0,w0,w11,ror#20 // Sigma0(a)
+	eor	x0,x0,x11,ror#20 // Sigma0(a)
 #if 0
 @ X[0..3] += sigma0(X[1..4])
 #endif
-		vadd.i32	v16,v16,v1
+	vadd.i32	q0,q0,q9
 	add	x10,x10,x2 // h+=Ch(e,f,g)
-		ldr x2,[sp,#8]
-		veor	d25,d25,d24
+	ldr	x2,[sp,#8]
+	veor	d25,d25,d24
 	and	x12,x12,x3 // (b^c)&=(a^b)
 	add	x6,x6,x10 // d+=h
 #if 0
 @ Dhi
 #endif
-		vshr.u32	d24,d7,#19
+	vshr.u32	d24,d7,#19
 	add	x10,x10,x0,ror#2 // h+=Sigma0(a)
 	eor	x12,x12,x4 // Maj(a,b,c)
 #if 0
 @ Dhi
 #endif
-		vsli.32 d24,d7,#13
+	vsli.32	d24,d7,#13
 	add	x9,x9,x2 // h+=X[i]+K[i]
-		eor x2,x7,x8
+	eor	x2,x7,x8
 #if 0
 @ sigma1(X[14..15])
 #endif
-		veor	d25,d25,d24
-		eor x0,x6,x6,ror#5
+	veor	d25,d25,d24
+	eor	x0,x6,x6,ror#5
 	add	x10,x10,x12 // h+=Maj(a,b,c) from the past
 #if 0
 @ X[0..1] += sigma1(X[14..15])
@@ -227,51 +202,51 @@ ENTRY(sha256_neon_transform)
 #if 0
 @ Dlo
 #endif
-		vadd.i32	d0,d0,d25
-		and x2,x2,x6
+	vadd.i32	d0,d0,d25
+	and	x2,x2,x6
 	eor	x12,x0,x6,ror#19 // Sigma1(e)
 #if 0
 @ Dlo
 #endif
-		vshr.u32	d24,d0,#17
-		eor x0,x10,x10,ror#11
+	vshr.u32	d24,d0,#17
+	eor	x0,x10,x10,ror#11
 	eor	x2,x2,x8 // Ch(e,f,g)
 #if 0
 @ Dlo
 #endif
-		vsli.32 d24,d0,#15
+	vsli.32	d24,d0,#15
 	add	x9,x9,x12,ror#6 // h+=Sigma1(e)
 	eor	x12,x10,x11 // a^b, b^c in next round
 #if 0
 @ Dlo
 #endif
-		vshr.u32	d25,d0,#10
+	vshr.u32	d25,d0,#10
 	eor	x0,x0,x10,ror#20 // Sigma0(a)
 	add	x9,x9,x2 // h+=Ch(e,f,g)
-		veor	d25,d25,d24
-		ldr x2,[sp,#12]
+	veor	d25,d25,d24
+	ldr	x2,[sp,#12]
 	and	x3,x3,x12 // (b^c)&=(a^b)
 #if 0
 @ Dlo
 #endif
-		vshr.u32	d24,d0,#19
+	vshr.u32	d24,d0,#19
 	add	x5,x5,x9 // d+=h
 	add	x9,x9,x0,ror#2 // h+=Sigma0(a)
 	eor	x3,x3,x11 // Maj(a,b,c)
-		vld1.32 {v0},[x14,:128]!
+	vld1.32	{q8},[x14,:128]!
 	add	x8,x8,x2 // h+=X[i]+K[i]
 #if 0
 @ Dlo
 #endif
-		vsli.32 d24,d0,#13
-		eor x2,x6,x7
-		eor x0,x5,x5,ror#5
+	vsli.32	d24,d0,#13
+	eor	x2,x6,x7
+	eor	x0,x5,x5,ror#5
 #if 0
 @ sigma1(X[16..17])
 #endif
-		veor	d25,d25,d24
+	veor	d25,d25,d24
 	add	x9,x9,x3 // h+=Maj(a,b,c) from the past
-		and x2,x2,x5
+	and	x2,x2,x5
 #if 0
 @ X[2..3] += sigma1(X[16..17])
 #endif
@@ -281,19 +256,19 @@ ENTRY(sha256_neon_transform)
 #if 0
 @ Dhi
 #endif
-		vadd.i32	d1,d1,d25
+	vadd.i32	d1,d1,d25
 	eor	x3,x0,x5,ror#19 // Sigma1(e)
-		eor x0,x9,x9,ror#11
-		vadd.i32	v0,v0,v16
+	eor	x0,x9,x9,ror#11
+	vadd.i32	q8,q8,q0
 	eor	x2,x2,x7 // Ch(e,f,g)
 	add	x8,x8,x3,ror#6 // h+=Sigma1(e)
 	eor	x3,x9,x10 // a^b, b^c in next round
 	eor	x0,x0,x9,ror#20 // Sigma0(a)
 	add	x8,x8,x2 // h+=Ch(e,f,g)
-		ldr x2,[sp,#16]
+	ldr	x2,[sp,#16]
 	and	x12,x12,x3 // (b^c)&=(a^b)
 	add	x4,x4,x8 // d+=h
-		vst1.32 {v0},[x1,:128]!
+	vst1.32	{q8},[x1,:128]!
 	add	x8,x8,x0,ror#2 // h+=Sigma0(a)
 	eor	x12,x12,x10 // Maj(a,b,c)
 #if 0
@@ -305,98 +280,91 @@ ENTRY(sha256_neon_transform)
 #if 0
 @ X[1..4]
 #endif
-		ext	v0.16b,v17.16b,v18.16b,#4
+	vext.8	q8,q1,q2,#4
 	add	x7,x7,x2 // h+=X[i]+K[i]
-		eor x2,x5,x6
-		eor w0,w4,w4,ror#5
+	eor	x2,x5,x6
+	eor	x0,x4,x4,ror#5
 #if 0
 @ X[9..12]
 #endif
-		ext	v1.16b,v19.16b,v16.16b,#4
+	vext.8	q9,q3,q0,#4
 	add	x8,x8,x12 // h+=Maj(a,b,c) from the past
-		and x2,x2,x4
-	eor	w12,w0,w4,ror#19 // Sigma1(e)
-		ushr	v2.4s,v0.4s,#7
-		eor w0,w8,w8,ror#11
+	and	x2,x2,x4
+	eor	x12,x0,x4,ror#19 // Sigma1(e)
+	vshr.u32	q10,q8,#7
+	eor	x0,x8,x8,ror#11
 	eor	x2,x2,x6 // Ch(e,f,g)
 #if 0
 @ X[0..3] += X[9..12]
 #endif
-		add	v17.4s,v17.4s,v1.4s
-	add	w7,w7,w12,ror#6 // h+=Sigma1(e)
+	vadd.i32	q1,q1,q9
+	add	x7,x7,x12,ror#6 // h+=Sigma1(e)
 	eor	x12,x8,x9 // a^b, b^c in next round
-		ushr	v1.4s,v0.4s,#3
-	eor	w0,w0,w8,ror#20 // Sigma0(a)
+	vshr.u32	q9,q8,#3
+	eor	x0,x0,x8,ror#20 // Sigma0(a)
 	add	x7,x7,x2 // h+=Ch(e,f,g)
-		sli v2.4s,v0.4s,#25
-		ldr x2,[sp,#20]
+	vsli.32	q10,q8,#25
+	ldr	x2,[sp,#20]
 	and	x3,x3,x12 // (b^c)&=(a^b)
-		ushr	v3.4s,v0.4s,#18
+	vshr.u32	q11,q8,#18
 	add	x11,x11,x7 // d+=h
-	add	w7,w7,w0,ror#2 // h+=Sigma0(a)
+	add	x7,x7,x0,ror#2 // h+=Sigma0(a)
 	eor	x3,x3,x9 // Maj(a,b,c)
-		eor	v1.16b,v1.16b,v2.16b
+	veor	q9,q9,q10
 	add	x6,x6,x2 // h+=X[i]+K[i]
-		sli v3.4s,v0.4s,#14
-		eor x2,x4,x5
-		eor w0,w11,w11,ror#5
+	vsli.32	q11,q8,#14
+	eor	x2,x4,x5
+	eor	x0,x11,x11,ror#5
 #if 0
 @ Dhi
 #endif
-		// q8-11 = v0-3 = ce v0-3
-		// q0-3 = v16-19 = ce v16-19
-		// d24 = q12 = v4
-		// d7 = q3 hi = v19 hi = v20 lo (tmp)
-		// d25 = q12 hi = v4 hi = v5 lo (tmp)
-		// d1 = q0 hi = v16 hi = v21 lo (tmp)
-
-		vshr.u32	d24,d1,#17
+	vshr.u32	d24,d1,#17
 	add	x7,x7,x3 // h+=Maj(a,b,c) from the past
-		and x2,x2,x11
+	and	x2,x2,x11
 #if 0
 @ sigma0(X[1..4])
 #endif
-		veor	v1,v1,v3
+	veor	q9,q9,q11
 	eor	x3,x0,x11,ror#19 // Sigma1(e)
-		eor x0,x7,x7,ror#11
+	eor	x0,x7,x7,ror#11
 #if 0
 @ Dhi
 #endif
-		vsli.32 d24,d1,#15
+	vsli.32	d24,d1,#15
 	eor	x2,x2,x5 // Ch(e,f,g)
 	add	x6,x6,x3,ror#6 // h+=Sigma1(e)
 #if 0
 @ Dhi
 #endif
-		vshr.u32	d25,d1,#10
+	vshr.u32	d25,d1,#10
 	eor	x3,x7,x8 // a^b, b^c in next round
 	eor	x0,x0,x7,ror#20 // Sigma0(a)
 #if 0
 @ X[0..3] += sigma0(X[1..4])
 #endif
-		vadd.i32	v17,v17,v1
+	vadd.i32	q1,q1,q9
 	add	x6,x6,x2 // h+=Ch(e,f,g)
-		ldr x2,[sp,#24]
-		veor	d25,d25,d24
+	ldr	x2,[sp,#24]
+	veor	d25,d25,d24
 	and	x12,x12,x3 // (b^c)&=(a^b)
 	add	x10,x10,x6 // d+=h
 #if 0
 @ Dhi
 #endif
-		vshr.u32	d24,d1,#19
+	vshr.u32	d24,d1,#19
 	add	x6,x6,x0,ror#2 // h+=Sigma0(a)
 	eor	x12,x12,x8 // Maj(a,b,c)
 #if 0
 @ Dhi
 #endif
-		vsli.32 d24,d1,#13
+	vsli.32	d24,d1,#13
 	add	x5,x5,x2 // h+=X[i]+K[i]
-		eor x2,x11,x4
+	eor	x2,x11,x4
 #if 0
 @ sigma1(X[14..15])
 #endif
-		veor	d25,d25,d24
-		eor x0,x10,x10,ror#5
+	veor	d25,d25,d24
+	eor	x0,x10,x10,ror#5
 	add	x6,x6,x12 // h+=Maj(a,b,c) from the past
 #if 0
 @ X[0..1] += sigma1(X[14..15])
@@ -407,51 +375,51 @@ ENTRY(sha256_neon_transform)
 #if 0
 @ Dlo
 #endif
-		vadd.i32	d2,d2,d25
-		and x2,x2,x10
+	vadd.i32	d2,d2,d25
+	and	x2,x2,x10
 	eor	x12,x0,x10,ror#19 // Sigma1(e)
 #if 0
 @ Dlo
 #endif
-		vshr.u32	d24,d2,#17
-		eor x0,x6,x6,ror#11
+	vshr.u32	d24,d2,#17
+	eor	x0,x6,x6,ror#11
 	eor	x2,x2,x4 // Ch(e,f,g)
 #if 0
 @ Dlo
 #endif
-		vsli.32 d24,d2,#15
+	vsli.32	d24,d2,#15
 	add	x5,x5,x12,ror#6 // h+=Sigma1(e)
 	eor	x12,x6,x7 // a^b, b^c in next round
 #if 0
 @ Dlo
 #endif
-		vshr.u32	d25,d2,#10
+	vshr.u32	d25,d2,#10
 	eor	x0,x0,x6,ror#20 // Sigma0(a)
 	add	x5,x5,x2 // h+=Ch(e,f,g)
-		veor	d25,d25,d24
-		ldr x2,[sp,#28]
+	veor	d25,d25,d24
+	ldr	x2,[sp,#28]
 	and	x3,x3,x12 // (b^c)&=(a^b)
 #if 0
 @ Dlo
 #endif
-		vshr.u32	d24,d2,#19
+	vshr.u32	d24,d2,#19
 	add	x9,x9,x5 // d+=h
 	add	x5,x5,x0,ror#2 // h+=Sigma0(a)
 	eor	x3,x3,x7 // Maj(a,b,c)
-		vld1.32 {v0},[x14,:128]!
+	vld1.32	{q8},[x14,:128]!
 	add	x4,x4,x2 // h+=X[i]+K[i]
 #if 0
 @ Dlo
 #endif
-		vsli.32 d24,d2,#13
-		eor x2,x10,x11
-		eor x0,x9,x9,ror#5
+	vsli.32	d24,d2,#13
+	eor	x2,x10,x11
+	eor	x0,x9,x9,ror#5
 #if 0
 @ sigma1(X[16..17])
 #endif
-		veor	d25,d25,d24
+	veor	d25,d25,d24
 	add	x5,x5,x3 // h+=Maj(a,b,c) from the past
-		and x2,x2,x9
+	and	x2,x2,x9
 #if 0
 @ X[2..3] += sigma1(X[16..17])
 #endif
@@ -461,19 +429,19 @@ ENTRY(sha256_neon_transform)
 #if 0
 @ Dhi
 #endif
-		vadd.i32	d3,d3,d25
+	vadd.i32	d3,d3,d25
 	eor	x3,x0,x9,ror#19 // Sigma1(e)
-		eor x0,x5,x5,ror#11
-		vadd.i32	v0,v0,v17
+	eor	x0,x5,x5,ror#11
+	vadd.i32	q8,q8,q1
 	eor	x2,x2,x11 // Ch(e,f,g)
 	add	x4,x4,x3,ror#6 // h+=Sigma1(e)
 	eor	x3,x5,x6 // a^b, b^c in next round
 	eor	x0,x0,x5,ror#20 // Sigma0(a)
 	add	x4,x4,x2 // h+=Ch(e,f,g)
-		ldr x2,[sp,#32]
+	ldr	x2,[sp,#32]
 	and	x12,x12,x3 // (b^c)&=(a^b)
 	add	x8,x8,x4 // d+=h
-		vst1.32 {v0},[x1,:128]!
+	vst1.32	{q8},[x1,:128]!
 	add	x4,x4,x0,ror#2 // h+=Sigma0(a)
 	eor	x12,x12,x6 // Maj(a,b,c)
 #if 0
@@ -485,91 +453,91 @@ ENTRY(sha256_neon_transform)
 #if 0
 @ X[1..4]
 #endif
-		ext	v0.16b,v18.16b,v19.16b,#4
+	vext.8	q8,q2,q3,#4
 	add	x11,x11,x2 // h+=X[i]+K[i]
-		eor x2,x9,x10
-		eor w0,w8,w8,ror#5
+	eor	x2,x9,x10
+	eor	x0,x8,x8,ror#5
 #if 0
 @ X[9..12]
 #endif
-		ext	v1.16b,v16.16b,v17.16b,#4
+	vext.8	q9,q0,q1,#4
 	add	x4,x4,x12 // h+=Maj(a,b,c) from the past
-		and x2,x2,x8
-	eor	w12,w0,w8,ror#19 // Sigma1(e)
-		ushr	v2.4s,v0.4s,#7
-		eor w0,w4,w4,ror#11
+	and	x2,x2,x8
+	eor	x12,x0,x8,ror#19 // Sigma1(e)
+	vshr.u32	q10,q8,#7
+	eor	x0,x4,x4,ror#11
 	eor	x2,x2,x10 // Ch(e,f,g)
 #if 0
 @ X[0..3] += X[9..12]
 #endif
-		add	v18.4s,v18.4s,v1.4s
-	add	w11,w11,w12,ror#6 // h+=Sigma1(e)
+	vadd.i32	q2,q2,q9
+	add	x11,x11,x12,ror#6 // h+=Sigma1(e)
 	eor	x12,x4,x5 // a^b, b^c in next round
-		ushr	v1.4s,v0.4s,#3
-	eor	w0,w0,w4,ror#20 // Sigma0(a)
+	vshr.u32	q9,q8,#3
+	eor	x0,x0,x4,ror#20 // Sigma0(a)
 	add	x11,x11,x2 // h+=Ch(e,f,g)
-		sli v2.4s,v0.4s,#25
-		ldr x2,[sp,#36]
+	vsli.32	q10,q8,#25
+	ldr	x2,[sp,#36]
 	and	x3,x3,x12 // (b^c)&=(a^b)
-		ushr	v3.4s,v0.4s,#18
+	vshr.u32	q11,q8,#18
 	add	x7,x7,x11 // d+=h
-	add	w11,w11,w0,ror#2 // h+=Sigma0(a)
+	add	x11,x11,x0,ror#2 // h+=Sigma0(a)
 	eor	x3,x3,x5 // Maj(a,b,c)
-		eor	v1.16b,v1.16b,v2.16b
+	veor	q9,q9,q10
 	add	x10,x10,x2 // h+=X[i]+K[i]
-		sli v3.4s,v0.4s,#14
-		eor x2,x8,x9
-		eor w0,w7,w7,ror#5
+	vsli.32	q11,q8,#14
+	eor	x2,x8,x9
+	eor	x0,x7,x7,ror#5
 #if 0
 @ Dhi
 #endif
-		vshr.u32	d24,d3,#17
+	vshr.u32	d24,d3,#17
 	add	x11,x11,x3 // h+=Maj(a,b,c) from the past
-		and x2,x2,x7
+	and	x2,x2,x7
 #if 0
 @ sigma0(X[1..4])
 #endif
-		veor	v1,v1,v3
+	veor	q9,q9,q11
 	eor	x3,x0,x7,ror#19 // Sigma1(e)
-		eor x0,x11,x11,ror#11
+	eor	x0,x11,x11,ror#11
 #if 0
 @ Dhi
 #endif
-		vsli.32 d24,d3,#15
+	vsli.32	d24,d3,#15
 	eor	x2,x2,x9 // Ch(e,f,g)
 	add	x10,x10,x3,ror#6 // h+=Sigma1(e)
 #if 0
 @ Dhi
 #endif
-		vshr.u32	d25,d3,#10
+	vshr.u32	d25,d3,#10
 	eor	x3,x11,x4 // a^b, b^c in next round
 	eor	x0,x0,x11,ror#20 // Sigma0(a)
 #if 0
 @ X[0..3] += sigma0(X[1..4])
 #endif
-		vadd.i32	v18,v18,v1
+	vadd.i32	q2,q2,q9
 	add	x10,x10,x2 // h+=Ch(e,f,g)
-		ldr x2,[sp,#40]
-		veor	d25,d25,d24
+	ldr	x2,[sp,#40]
+	veor	d25,d25,d24
 	and	x12,x12,x3 // (b^c)&=(a^b)
 	add	x6,x6,x10 // d+=h
 #if 0
 @ Dhi
 #endif
-		vshr.u32	d24,d3,#19
+	vshr.u32	d24,d3,#19
 	add	x10,x10,x0,ror#2 // h+=Sigma0(a)
 	eor	x12,x12,x4 // Maj(a,b,c)
 #if 0
 @ Dhi
 #endif
-		vsli.32 d24,d3,#13
+	vsli.32	d24,d3,#13
 	add	x9,x9,x2 // h+=X[i]+K[i]
-		eor x2,x7,x8
+	eor	x2,x7,x8
 #if 0
 @ sigma1(X[14..15])
 #endif
-		veor	d25,d25,d24
-		eor x0,x6,x6,ror#5
+	veor	d25,d25,d24
+	eor	x0,x6,x6,ror#5
 	add	x10,x10,x12 // h+=Maj(a,b,c) from the past
 #if 0
 @ X[0..1] += sigma1(X[14..15])
@@ -580,51 +548,51 @@ ENTRY(sha256_neon_transform)
 #if 0
 @ Dlo
 #endif
-		vadd.i32	d4,d4,d25
-		and x2,x2,x6
+	vadd.i32	d4,d4,d25
+	and	x2,x2,x6
 	eor	x12,x0,x6,ror#19 // Sigma1(e)
 #if 0
 @ Dlo
 #endif
-		vshr.u32	d24,d4,#17
-		eor x0,x10,x10,ror#11
+	vshr.u32	d24,d4,#17
+	eor	x0,x10,x10,ror#11
 	eor	x2,x2,x8 // Ch(e,f,g)
 #if 0
 @ Dlo
 #endif
-		vsli.32 d24,d4,#15
+	vsli.32	d24,d4,#15
 	add	x9,x9,x12,ror#6 // h+=Sigma1(e)
 	eor	x12,x10,x11 // a^b, b^c in next round
 #if 0
 @ Dlo
 #endif
-		vshr.u32	d25,d4,#10
+	vshr.u32	d25,d4,#10
 	eor	x0,x0,x10,ror#20 // Sigma0(a)
 	add	x9,x9,x2 // h+=Ch(e,f,g)
-		veor	d25,d25,d24
-		ldr x2,[sp,#44]
+	veor	d25,d25,d24
+	ldr	x2,[sp,#44]
 	and	x3,x3,x12 // (b^c)&=(a^b)
 #if 0
 @ Dlo
 #endif
-		vshr.u32	d24,d4,#19
+	vshr.u32	d24,d4,#19
 	add	x5,x5,x9 // d+=h
 	add	x9,x9,x0,ror#2 // h+=Sigma0(a)
 	eor	x3,x3,x11 // Maj(a,b,c)
-		vld1.32 {v0},[x14,:128]!
+	vld1.32	{q8},[x14,:128]!
 	add	x8,x8,x2 // h+=X[i]+K[i]
 #if 0
 @ Dlo
 #endif
-		vsli.32 d24,d4,#13
-		eor x2,x6,x7
-		eor x0,x5,x5,ror#5
+	vsli.32	d24,d4,#13
+	eor	x2,x6,x7
+	eor	x0,x5,x5,ror#5
 #if 0
 @ sigma1(X[16..17])
 #endif
-		veor	d25,d25,d24
+	veor	d25,d25,d24
 	add	x9,x9,x3 // h+=Maj(a,b,c) from the past
-		and x2,x2,x5
+	and	x2,x2,x5
 #if 0
 @ X[2..3] += sigma1(X[16..17])
 #endif
@@ -634,19 +602,19 @@ ENTRY(sha256_neon_transform)
 #if 0
 @ Dhi
 #endif
-		vadd.i32	d5,d5,d25
+	vadd.i32	d5,d5,d25
 	eor	x3,x0,x5,ror#19 // Sigma1(e)
-		eor x0,x9,x9,ror#11
-		vadd.i32	v0,v0,v18
+	eor	x0,x9,x9,ror#11
+	vadd.i32	q8,q8,q2
 	eor	x2,x2,x7 // Ch(e,f,g)
 	add	x8,x8,x3,ror#6 // h+=Sigma1(e)
 	eor	x3,x9,x10 // a^b, b^c in next round
 	eor	x0,x0,x9,ror#20 // Sigma0(a)
 	add	x8,x8,x2 // h+=Ch(e,f,g)
-		ldr x2,[sp,#48]
+	ldr	x2,[sp,#48]
 	and	x12,x12,x3 // (b^c)&=(a^b)
 	add	x4,x4,x8 // d+=h
-		vst1.32 {v0},[x1,:128]!
+	vst1.32	{q8},[x1,:128]!
 	add	x8,x8,x0,ror#2 // h+=Sigma0(a)
 	eor	x12,x12,x10 // Maj(a,b,c)
 #if 0
@@ -658,91 +626,91 @@ ENTRY(sha256_neon_transform)
 #if 0
 @ X[1..4]
 #endif
-		ext	v0.16b,v19.16b,v16.16b,#4
+	vext.8	q8,q3,q0,#4
 	add	x7,x7,x2 // h+=X[i]+K[i]
-		eor x2,x5,x6
-		eor w0,w4,w4,ror#5
+	eor	x2,x5,x6
+	eor	x0,x4,x4,ror#5
 #if 0
 @ X[9..12]
 #endif
-		ext	v1.16b,v17.16b,v18.16b,#4
+	vext.8	q9,q1,q2,#4
 	add	x8,x8,x12 // h+=Maj(a,b,c) from the past
-		and x2,x2,x4
-	eor	w12,w0,w4,ror#19 // Sigma1(e)
-		ushr	v2.4s,v0.4s,#7
-		eor w0,w8,w8,ror#11
+	and	x2,x2,x4
+	eor	x12,x0,x4,ror#19 // Sigma1(e)
+	vshr.u32	q10,q8,#7
+	eor	x0,x8,x8,ror#11
 	eor	x2,x2,x6 // Ch(e,f,g)
 #if 0
 @ X[0..3] += X[9..12]
 #endif
-		add	v19.4s,v19.4s,v1.4s
-	add	w7,w7,w12,ror#6 // h+=Sigma1(e)
+	vadd.i32	q3,q3,q9
+	add	x7,x7,x12,ror#6 // h+=Sigma1(e)
 	eor	x12,x8,x9 // a^b, b^c in next round
-		ushr	v1.4s,v0.4s,#3
-	eor	w0,w0,w8,ror#20 // Sigma0(a)
+	vshr.u32	q9,q8,#3
+	eor	x0,x0,x8,ror#20 // Sigma0(a)
 	add	x7,x7,x2 // h+=Ch(e,f,g)
-		sli v2.4s,v0.4s,#25
-		ldr x2,[sp,#52]
+	vsli.32	q10,q8,#25
+	ldr	x2,[sp,#52]
 	and	x3,x3,x12 // (b^c)&=(a^b)
-		ushr	v3.4s,v0.4s,#18
+	vshr.u32	q11,q8,#18
 	add	x11,x11,x7 // d+=h
-	add	w7,w7,w0,ror#2 // h+=Sigma0(a)
+	add	x7,x7,x0,ror#2 // h+=Sigma0(a)
 	eor	x3,x3,x9 // Maj(a,b,c)
-		eor	v1.16b,v1.16b,v2.16b
+	veor	q9,q9,q10
 	add	x6,x6,x2 // h+=X[i]+K[i]
-		sli v3.4s,v0.4s,#14
-		eor x2,x4,x5
-		eor w0,w11,w11,ror#5
+	vsli.32	q11,q8,#14
+	eor	x2,x4,x5
+	eor	x0,x11,x11,ror#5
 #if 0
 @ Dhi
 #endif
-		vshr.u32	d24,d5,#17
+	vshr.u32	d24,d5,#17
 	add	x7,x7,x3 // h+=Maj(a,b,c) from the past
-		and x2,x2,x11
+	and	x2,x2,x11
 #if 0
 @ sigma0(X[1..4])
 #endif
-		veor	v1,v1,v3
+	veor	q9,q9,q11
 	eor	x3,x0,x11,ror#19 // Sigma1(e)
-		eor x0,x7,x7,ror#11
+	eor	x0,x7,x7,ror#11
 #if 0
 @ Dhi
 #endif
-		vsli.32 d24,d5,#15
+	vsli.32	d24,d5,#15
 	eor	x2,x2,x5 // Ch(e,f,g)
 	add	x6,x6,x3,ror#6 // h+=Sigma1(e)
 #if 0
 @ Dhi
 #endif
-		vshr.u32	d25,d5,#10
+	vshr.u32	d25,d5,#10
 	eor	x3,x7,x8 // a^b, b^c in next round
 	eor	x0,x0,x7,ror#20 // Sigma0(a)
 #if 0
 @ X[0..3] += sigma0(X[1..4])
 #endif
-		vadd.i32	v19,v19,v1
+	vadd.i32	q3,q3,q9
 	add	x6,x6,x2 // h+=Ch(e,f,g)
-		ldr x2,[sp,#56]
-		veor	d25,d25,d24
+	ldr	x2,[sp,#56]
+	veor	d25,d25,d24
 	and	x12,x12,x3 // (b^c)&=(a^b)
 	add	x10,x10,x6 // d+=h
 #if 0
 @ Dhi
 #endif
-		vshr.u32	d24,d5,#19
+	vshr.u32	d24,d5,#19
 	add	x6,x6,x0,ror#2 // h+=Sigma0(a)
 	eor	x12,x12,x8 // Maj(a,b,c)
 #if 0
 @ Dhi
 #endif
-		vsli.32 d24,d5,#13
+	vsli.32	d24,d5,#13
 	add	x5,x5,x2 // h+=X[i]+K[i]
-		eor x2,x11,x4
+	eor	x2,x11,x4
 #if 0
 @ sigma1(X[14..15])
 #endif
-		veor	d25,d25,d24
-		eor x0,x10,x10,ror#5
+	veor	d25,d25,d24
+	eor	x0,x10,x10,ror#5
 	add	x6,x6,x12 // h+=Maj(a,b,c) from the past
 #if 0
 @ X[0..1] += sigma1(X[14..15])
@@ -753,51 +721,51 @@ ENTRY(sha256_neon_transform)
 #if 0
 @ Dlo
 #endif
-		vadd.i32	d6,d6,d25
-		and x2,x2,x10
+	vadd.i32	d6,d6,d25
+	and	x2,x2,x10
 	eor	x12,x0,x10,ror#19 // Sigma1(e)
 #if 0
 @ Dlo
 #endif
-		vshr.u32	d24,d6,#17
-		eor x0,x6,x6,ror#11
+	vshr.u32	d24,d6,#17
+	eor	x0,x6,x6,ror#11
 	eor	x2,x2,x4 // Ch(e,f,g)
 #if 0
 @ Dlo
 #endif
-		vsli.32 d24,d6,#15
+	vsli.32	d24,d6,#15
 	add	x5,x5,x12,ror#6 // h+=Sigma1(e)
 	eor	x12,x6,x7 // a^b, b^c in next round
 #if 0
 @ Dlo
 #endif
-		vshr.u32	d25,d6,#10
+	vshr.u32	d25,d6,#10
 	eor	x0,x0,x6,ror#20 // Sigma0(a)
 	add	x5,x5,x2 // h+=Ch(e,f,g)
-		veor	d25,d25,d24
-		ldr x2,[sp,#60]
+	veor	d25,d25,d24
+	ldr	x2,[sp,#60]
 	and	x3,x3,x12 // (b^c)&=(a^b)
 #if 0
 @ Dlo
 #endif
-		vshr.u32	d24,d6,#19
+	vshr.u32	d24,d6,#19
 	add	x9,x9,x5 // d+=h
 	add	x5,x5,x0,ror#2 // h+=Sigma0(a)
 	eor	x3,x3,x7 // Maj(a,b,c)
-		vld1.32 {v0},[x14,:128]!
+	vld1.32	{q8},[x14,:128]!
 	add	x4,x4,x2 // h+=X[i]+K[i]
 #if 0
 @ Dlo
 #endif
-		vsli.32 d24,d6,#13
-		eor x2,x10,x11
-		eor x0,x9,x9,ror#5
+	vsli.32	d24,d6,#13
+	eor	x2,x10,x11
+	eor	x0,x9,x9,ror#5
 #if 0
 @ sigma1(X[16..17])
 #endif
-		veor	d25,d25,d24
+	veor	d25,d25,d24
 	add	x5,x5,x3 // h+=Maj(a,b,c) from the past
-		and x2,x2,x9
+	and	x2,x2,x9
 #if 0
 @ X[2..3] += sigma1(X[16..17])
 #endif
@@ -807,19 +775,19 @@ ENTRY(sha256_neon_transform)
 #if 0
 @ Dhi
 #endif
-		vadd.i32	d7,d7,d25
+	vadd.i32	d7,d7,d25
 	eor	x3,x0,x9,ror#19 // Sigma1(e)
-		eor x0,x5,x5,ror#11
-		vadd.i32	v0,v0,v19
+	eor	x0,x5,x5,ror#11
+	vadd.i32	q8,q8,q3
 	eor	x2,x2,x11 // Ch(e,f,g)
 	add	x4,x4,x3,ror#6 // h+=Sigma1(e)
 	eor	x3,x5,x6 // a^b, b^c in next round
 	eor	x0,x0,x5,ror#20 // Sigma0(a)
 	add	x4,x4,x2 // h+=Ch(e,f,g)
-		ldr x2,[x14]
+	ldr	x2,[x14]
 	and	x12,x12,x3 // (b^c)&=(a^b)
 	add	x8,x8,x4 // d+=h
-		vst1.32 {v0},[x1,:128]!
+	vst1.32	{q8},[x1,:128]!
 	add	x4,x4,x0,ror#2 // h+=Sigma0(a)
 	eor	x12,x12,x6 // Maj(a,b,c)
 #if 0
@@ -828,102 +796,102 @@ ENTRY(sha256_neon_transform)
 #if 0
 	@ after 4 Xupdates
 #endif
-		teq x2,#0				@ check for K256 terminator
-		ldr x2,[sp,#0]
-		sub x1,x1,#64
-		bne .L_00_48
-	
-		ldr 	x1,[sp,#68]
-		ldr 	x0,[sp,#72]
-		sub 	x14,x14,#256	@ rewind x14
-		teq 	x1,x0
-		it		eq
-		subeq		x1,x1,#64		@ avoid SEGV
-		vld1.8		{q0},[x1]!		@ load next input block
-		vld1.8		{q1},[x1]!
-		vld1.8		{q2},[x1]!
-		vld1.8		{q3},[x1]!
-		it		ne
-		strne		x1,[sp,#68]
-		mov 	x1,sp
+	teq	x2,#0				@ check for K256 terminator
+	ldr	x2,[sp,#0]
+	sub	x1,x1,#64
+	bne	.L_00_48
+
+	ldr		x1,[sp,#68]
+	ldr		x0,[sp,#72]
+	sub		x14,x14,#256	@ rewind x14
+	teq		x1,x0
+	it		eq
+	subeq		x1,x1,#64		@ avoid SEGV
+	vld1.8		{q0},[x1]!		@ load next input block
+	vld1.8		{q1},[x1]!
+	vld1.8		{q2},[x1]!
+	vld1.8		{q3},[x1]!
+	it		ne
+	strne		x1,[sp,#68]
+	mov		x1,sp
 #if 0
 @ Xpreload
 #endif
 	add	x11,x11,x2 // h+=X[i]+K[i]
-		eor x2,x9,x10
-		eor x0,x8,x8,ror#5
+	eor	x2,x9,x10
+	eor	x0,x8,x8,ror#5
 	add	x4,x4,x12 // h+=Maj(a,b,c) from the past
-		vld1.32 {v0},[x14,:128]!
-		and x2,x2,x8
+	vld1.32	{q8},[x14,:128]!
+	and	x2,x2,x8
 	eor	x12,x0,x8,ror#19 // Sigma1(e)
-		eor x0,x4,x4,ror#11
+	eor	x0,x4,x4,ror#11
 	eor	x2,x2,x10 // Ch(e,f,g)
-		vrev32.8	v16,v16
+	vrev32.8	q0,q0
 	add	x11,x11,x12,ror#6 // h+=Sigma1(e)
 	eor	x12,x4,x5 // a^b, b^c in next round
 	eor	x0,x0,x4,ror#20 // Sigma0(a)
 	add	x11,x11,x2 // h+=Ch(e,f,g)
-		vadd.i32	v0,v0,v16
+	vadd.i32	q8,q8,q0
 #if 0
 @ remaining insn
 #endif
-		ldr x2,[sp,#4]
+	ldr	x2,[sp,#4]
 	and	x3,x3,x12 // (b^c)&=(a^b)
 	add	x7,x7,x11 // d+=h
 	add	x11,x11,x0,ror#2 // h+=Sigma0(a)
 	eor	x3,x3,x5 // Maj(a,b,c)
 	add	x10,x10,x2 // h+=X[i]+K[i]
-		eor x2,x8,x9
-		eor x0,x7,x7,ror#5
+	eor	x2,x8,x9
+	eor	x0,x7,x7,ror#5
 	add	x11,x11,x3 // h+=Maj(a,b,c) from the past
-		and x2,x2,x7
+	and	x2,x2,x7
 	eor	x3,x0,x7,ror#19 // Sigma1(e)
-		eor x0,x11,x11,ror#11
+	eor	x0,x11,x11,ror#11
 	eor	x2,x2,x9 // Ch(e,f,g)
 	add	x10,x10,x3,ror#6 // h+=Sigma1(e)
 	eor	x3,x11,x4 // a^b, b^c in next round
 	eor	x0,x0,x11,ror#20 // Sigma0(a)
 	add	x10,x10,x2 // h+=Ch(e,f,g)
-		ldr x2,[sp,#8]
+	ldr	x2,[sp,#8]
 	and	x12,x12,x3 // (b^c)&=(a^b)
 	add	x6,x6,x10 // d+=h
 	add	x10,x10,x0,ror#2 // h+=Sigma0(a)
 	eor	x12,x12,x4 // Maj(a,b,c)
 	add	x9,x9,x2 // h+=X[i]+K[i]
-		eor x2,x7,x8
-		eor x0,x6,x6,ror#5
+	eor	x2,x7,x8
+	eor	x0,x6,x6,ror#5
 	add	x10,x10,x12 // h+=Maj(a,b,c) from the past
-		and x2,x2,x6
+	and	x2,x2,x6
 	eor	x12,x0,x6,ror#19 // Sigma1(e)
-		eor x0,x10,x10,ror#11
+	eor	x0,x10,x10,ror#11
 	eor	x2,x2,x8 // Ch(e,f,g)
 	add	x9,x9,x12,ror#6 // h+=Sigma1(e)
 	eor	x12,x10,x11 // a^b, b^c in next round
 	eor	x0,x0,x10,ror#20 // Sigma0(a)
 	add	x9,x9,x2 // h+=Ch(e,f,g)
-		ldr x2,[sp,#12]
+	ldr	x2,[sp,#12]
 	and	x3,x3,x12 // (b^c)&=(a^b)
 	add	x5,x5,x9 // d+=h
 	add	x9,x9,x0,ror#2 // h+=Sigma0(a)
 	eor	x3,x3,x11 // Maj(a,b,c)
 	add	x8,x8,x2 // h+=X[i]+K[i]
-		eor x2,x6,x7
-		eor x0,x5,x5,ror#5
+	eor	x2,x6,x7
+	eor	x0,x5,x5,ror#5
 	add	x9,x9,x3 // h+=Maj(a,b,c) from the past
-		and x2,x2,x5
+	and	x2,x2,x5
 	eor	x3,x0,x5,ror#19 // Sigma1(e)
-		eor x0,x9,x9,ror#11
+	eor	x0,x9,x9,ror#11
 	eor	x2,x2,x7 // Ch(e,f,g)
 	add	x8,x8,x3,ror#6 // h+=Sigma1(e)
 	eor	x3,x9,x10 // a^b, b^c in next round
 	eor	x0,x0,x9,ror#20 // Sigma0(a)
 	add	x8,x8,x2 // h+=Ch(e,f,g)
-		ldr x2,[sp,#16]
+	ldr	x2,[sp,#16]
 	and	x12,x12,x3 // (b^c)&=(a^b)
 	add	x4,x4,x8 // d+=h
 	add	x8,x8,x0,ror#2 // h+=Sigma0(a)
 	eor	x12,x12,x10 // Maj(a,b,c)
-		vst1.32 {v0},[x1,:128]!
+	vst1.32	{q8},[x1,:128]!
 #if 0
 @ Xpreload 'rotate' X[]
 #endif
@@ -931,80 +899,80 @@ ENTRY(sha256_neon_transform)
 @ Xpreload
 #endif
 	add	x7,x7,x2 // h+=X[i]+K[i]
-		eor x2,x5,x6
-		eor x0,x4,x4,ror#5
+	eor	x2,x5,x6
+	eor	x0,x4,x4,ror#5
 	add	x8,x8,x12 // h+=Maj(a,b,c) from the past
-		vld1.32 {v0},[x14,:128]!
-		and x2,x2,x4
+	vld1.32	{q8},[x14,:128]!
+	and	x2,x2,x4
 	eor	x12,x0,x4,ror#19 // Sigma1(e)
-		eor x0,x8,x8,ror#11
+	eor	x0,x8,x8,ror#11
 	eor	x2,x2,x6 // Ch(e,f,g)
-		vrev32.8	v17,v17
+	vrev32.8	q1,q1
 	add	x7,x7,x12,ror#6 // h+=Sigma1(e)
 	eor	x12,x8,x9 // a^b, b^c in next round
 	eor	x0,x0,x8,ror#20 // Sigma0(a)
 	add	x7,x7,x2 // h+=Ch(e,f,g)
-		vadd.i32	v0,v0,v17
+	vadd.i32	q8,q8,q1
 #if 0
 @ remaining insn
 #endif
-		ldr x2,[sp,#20]
+	ldr	x2,[sp,#20]
 	and	x3,x3,x12 // (b^c)&=(a^b)
 	add	x11,x11,x7 // d+=h
 	add	x7,x7,x0,ror#2 // h+=Sigma0(a)
 	eor	x3,x3,x9 // Maj(a,b,c)
 	add	x6,x6,x2 // h+=X[i]+K[i]
-		eor x2,x4,x5
-		eor x0,x11,x11,ror#5
+	eor	x2,x4,x5
+	eor	x0,x11,x11,ror#5
 	add	x7,x7,x3 // h+=Maj(a,b,c) from the past
-		and x2,x2,x11
+	and	x2,x2,x11
 	eor	x3,x0,x11,ror#19 // Sigma1(e)
-		eor x0,x7,x7,ror#11
+	eor	x0,x7,x7,ror#11
 	eor	x2,x2,x5 // Ch(e,f,g)
 	add	x6,x6,x3,ror#6 // h+=Sigma1(e)
 	eor	x3,x7,x8 // a^b, b^c in next round
 	eor	x0,x0,x7,ror#20 // Sigma0(a)
 	add	x6,x6,x2 // h+=Ch(e,f,g)
-		ldr x2,[sp,#24]
+	ldr	x2,[sp,#24]
 	and	x12,x12,x3 // (b^c)&=(a^b)
 	add	x10,x10,x6 // d+=h
 	add	x6,x6,x0,ror#2 // h+=Sigma0(a)
 	eor	x12,x12,x8 // Maj(a,b,c)
 	add	x5,x5,x2 // h+=X[i]+K[i]
-		eor x2,x11,x4
-		eor x0,x10,x10,ror#5
+	eor	x2,x11,x4
+	eor	x0,x10,x10,ror#5
 	add	x6,x6,x12 // h+=Maj(a,b,c) from the past
-		and x2,x2,x10
+	and	x2,x2,x10
 	eor	x12,x0,x10,ror#19 // Sigma1(e)
-		eor x0,x6,x6,ror#11
+	eor	x0,x6,x6,ror#11
 	eor	x2,x2,x4 // Ch(e,f,g)
 	add	x5,x5,x12,ror#6 // h+=Sigma1(e)
 	eor	x12,x6,x7 // a^b, b^c in next round
 	eor	x0,x0,x6,ror#20 // Sigma0(a)
 	add	x5,x5,x2 // h+=Ch(e,f,g)
-		ldr x2,[sp,#28]
+	ldr	x2,[sp,#28]
 	and	x3,x3,x12 // (b^c)&=(a^b)
 	add	x9,x9,x5 // d+=h
 	add	x5,x5,x0,ror#2 // h+=Sigma0(a)
 	eor	x3,x3,x7 // Maj(a,b,c)
 	add	x4,x4,x2 // h+=X[i]+K[i]
-		eor x2,x10,x11
-		eor x0,x9,x9,ror#5
+	eor	x2,x10,x11
+	eor	x0,x9,x9,ror#5
 	add	x5,x5,x3 // h+=Maj(a,b,c) from the past
-		and x2,x2,x9
+	and	x2,x2,x9
 	eor	x3,x0,x9,ror#19 // Sigma1(e)
-		eor x0,x5,x5,ror#11
+	eor	x0,x5,x5,ror#11
 	eor	x2,x2,x11 // Ch(e,f,g)
 	add	x4,x4,x3,ror#6 // h+=Sigma1(e)
 	eor	x3,x5,x6 // a^b, b^c in next round
 	eor	x0,x0,x5,ror#20 // Sigma0(a)
 	add	x4,x4,x2 // h+=Ch(e,f,g)
-		ldr x2,[sp,#32]
+	ldr	x2,[sp,#32]
 	and	x12,x12,x3 // (b^c)&=(a^b)
 	add	x8,x8,x4 // d+=h
 	add	x4,x4,x0,ror#2 // h+=Sigma0(a)
 	eor	x12,x12,x6 // Maj(a,b,c)
-		vst1.32 {v0},[x1,:128]!
+	vst1.32	{q8},[x1,:128]!
 #if 0
 @ Xpreload 'rotate' X[]
 #endif
@@ -1012,80 +980,80 @@ ENTRY(sha256_neon_transform)
 @ Xpreload
 #endif
 	add	x11,x11,x2 // h+=X[i]+K[i]
-		eor x2,x9,x10
-		eor x0,x8,x8,ror#5
+	eor	x2,x9,x10
+	eor	x0,x8,x8,ror#5
 	add	x4,x4,x12 // h+=Maj(a,b,c) from the past
-		vld1.32 {v0},[x14,:128]!
-		and x2,x2,x8
+	vld1.32	{q8},[x14,:128]!
+	and	x2,x2,x8
 	eor	x12,x0,x8,ror#19 // Sigma1(e)
-		eor x0,x4,x4,ror#11
+	eor	x0,x4,x4,ror#11
 	eor	x2,x2,x10 // Ch(e,f,g)
-		vrev32.8	v18,v18
+	vrev32.8	q2,q2
 	add	x11,x11,x12,ror#6 // h+=Sigma1(e)
 	eor	x12,x4,x5 // a^b, b^c in next round
 	eor	x0,x0,x4,ror#20 // Sigma0(a)
 	add	x11,x11,x2 // h+=Ch(e,f,g)
-		vadd.i32	v0,v0,v18
+	vadd.i32	q8,q8,q2
 #if 0
 @ remaining insn
 #endif
-		ldr x2,[sp,#36]
+	ldr	x2,[sp,#36]
 	and	x3,x3,x12 // (b^c)&=(a^b)
 	add	x7,x7,x11 // d+=h
 	add	x11,x11,x0,ror#2 // h+=Sigma0(a)
 	eor	x3,x3,x5 // Maj(a,b,c)
 	add	x10,x10,x2 // h+=X[i]+K[i]
-		eor x2,x8,x9
-		eor x0,x7,x7,ror#5
+	eor	x2,x8,x9
+	eor	x0,x7,x7,ror#5
 	add	x11,x11,x3 // h+=Maj(a,b,c) from the past
-		and x2,x2,x7
+	and	x2,x2,x7
 	eor	x3,x0,x7,ror#19 // Sigma1(e)
-		eor x0,x11,x11,ror#11
+	eor	x0,x11,x11,ror#11
 	eor	x2,x2,x9 // Ch(e,f,g)
 	add	x10,x10,x3,ror#6 // h+=Sigma1(e)
 	eor	x3,x11,x4 // a^b, b^c in next round
 	eor	x0,x0,x11,ror#20 // Sigma0(a)
 	add	x10,x10,x2 // h+=Ch(e,f,g)
-		ldr x2,[sp,#40]
+	ldr	x2,[sp,#40]
 	and	x12,x12,x3 // (b^c)&=(a^b)
 	add	x6,x6,x10 // d+=h
 	add	x10,x10,x0,ror#2 // h+=Sigma0(a)
 	eor	x12,x12,x4 // Maj(a,b,c)
 	add	x9,x9,x2 // h+=X[i]+K[i]
-		eor x2,x7,x8
-		eor x0,x6,x6,ror#5
+	eor	x2,x7,x8
+	eor	x0,x6,x6,ror#5
 	add	x10,x10,x12 // h+=Maj(a,b,c) from the past
-		and x2,x2,x6
+	and	x2,x2,x6
 	eor	x12,x0,x6,ror#19 // Sigma1(e)
-		eor x0,x10,x10,ror#11
+	eor	x0,x10,x10,ror#11
 	eor	x2,x2,x8 // Ch(e,f,g)
 	add	x9,x9,x12,ror#6 // h+=Sigma1(e)
 	eor	x12,x10,x11 // a^b, b^c in next round
 	eor	x0,x0,x10,ror#20 // Sigma0(a)
 	add	x9,x9,x2 // h+=Ch(e,f,g)
-		ldr x2,[sp,#44]
+	ldr	x2,[sp,#44]
 	and	x3,x3,x12 // (b^c)&=(a^b)
 	add	x5,x5,x9 // d+=h
 	add	x9,x9,x0,ror#2 // h+=Sigma0(a)
 	eor	x3,x3,x11 // Maj(a,b,c)
 	add	x8,x8,x2 // h+=X[i]+K[i]
-		eor x2,x6,x7
-		eor x0,x5,x5,ror#5
+	eor	x2,x6,x7
+	eor	x0,x5,x5,ror#5
 	add	x9,x9,x3 // h+=Maj(a,b,c) from the past
-		and x2,x2,x5
+	and	x2,x2,x5
 	eor	x3,x0,x5,ror#19 // Sigma1(e)
-		eor x0,x9,x9,ror#11
+	eor	x0,x9,x9,ror#11
 	eor	x2,x2,x7 // Ch(e,f,g)
 	add	x8,x8,x3,ror#6 // h+=Sigma1(e)
 	eor	x3,x9,x10 // a^b, b^c in next round
 	eor	x0,x0,x9,ror#20 // Sigma0(a)
 	add	x8,x8,x2 // h+=Ch(e,f,g)
-		ldr x2,[sp,#48]
+	ldr	x2,[sp,#48]
 	and	x12,x12,x3 // (b^c)&=(a^b)
 	add	x4,x4,x8 // d+=h
 	add	x8,x8,x0,ror#2 // h+=Sigma0(a)
 	eor	x12,x12,x10 // Maj(a,b,c)
-		vst1.32 {v0},[x1,:128]!
+	vst1.32	{q8},[x1,:128]!
 #if 0
 @ Xpreload 'rotate' X[]
 #endif
@@ -1093,119 +1061,119 @@ ENTRY(sha256_neon_transform)
 @ Xpreload
 #endif
 	add	x7,x7,x2 // h+=X[i]+K[i]
-		eor x2,x5,x6
-		eor x0,x4,x4,ror#5
+	eor	x2,x5,x6
+	eor	x0,x4,x4,ror#5
 	add	x8,x8,x12 // h+=Maj(a,b,c) from the past
-		vld1.32 {v0},[x14,:128]!
-		and x2,x2,x4
+	vld1.32	{q8},[x14,:128]!
+	and	x2,x2,x4
 	eor	x12,x0,x4,ror#19 // Sigma1(e)
-		eor x0,x8,x8,ror#11
+	eor	x0,x8,x8,ror#11
 	eor	x2,x2,x6 // Ch(e,f,g)
-		vrev32.8	v19,v19
+	vrev32.8	q3,q3
 	add	x7,x7,x12,ror#6 // h+=Sigma1(e)
 	eor	x12,x8,x9 // a^b, b^c in next round
 	eor	x0,x0,x8,ror#20 // Sigma0(a)
 	add	x7,x7,x2 // h+=Ch(e,f,g)
-		vadd.i32	v0,v0,v19
+	vadd.i32	q8,q8,q3
 #if 0
 @ remaining insn
 #endif
-		ldr x2,[sp,#52]
+	ldr	x2,[sp,#52]
 	and	x3,x3,x12 // (b^c)&=(a^b)
 	add	x11,x11,x7 // d+=h
 	add	x7,x7,x0,ror#2 // h+=Sigma0(a)
 	eor	x3,x3,x9 // Maj(a,b,c)
 	add	x6,x6,x2 // h+=X[i]+K[i]
-		eor x2,x4,x5
-		eor x0,x11,x11,ror#5
+	eor	x2,x4,x5
+	eor	x0,x11,x11,ror#5
 	add	x7,x7,x3 // h+=Maj(a,b,c) from the past
-		and x2,x2,x11
+	and	x2,x2,x11
 	eor	x3,x0,x11,ror#19 // Sigma1(e)
-		eor x0,x7,x7,ror#11
+	eor	x0,x7,x7,ror#11
 	eor	x2,x2,x5 // Ch(e,f,g)
 	add	x6,x6,x3,ror#6 // h+=Sigma1(e)
 	eor	x3,x7,x8 // a^b, b^c in next round
 	eor	x0,x0,x7,ror#20 // Sigma0(a)
 	add	x6,x6,x2 // h+=Ch(e,f,g)
-		ldr x2,[sp,#56]
+	ldr	x2,[sp,#56]
 	and	x12,x12,x3 // (b^c)&=(a^b)
 	add	x10,x10,x6 // d+=h
 	add	x6,x6,x0,ror#2 // h+=Sigma0(a)
 	eor	x12,x12,x8 // Maj(a,b,c)
 	add	x5,x5,x2 // h+=X[i]+K[i]
-		eor x2,x11,x4
-		eor x0,x10,x10,ror#5
+	eor	x2,x11,x4
+	eor	x0,x10,x10,ror#5
 	add	x6,x6,x12 // h+=Maj(a,b,c) from the past
-		and x2,x2,x10
+	and	x2,x2,x10
 	eor	x12,x0,x10,ror#19 // Sigma1(e)
-		eor x0,x6,x6,ror#11
+	eor	x0,x6,x6,ror#11
 	eor	x2,x2,x4 // Ch(e,f,g)
 	add	x5,x5,x12,ror#6 // h+=Sigma1(e)
 	eor	x12,x6,x7 // a^b, b^c in next round
 	eor	x0,x0,x6,ror#20 // Sigma0(a)
 	add	x5,x5,x2 // h+=Ch(e,f,g)
-		ldr x2,[sp,#60]
+	ldr	x2,[sp,#60]
 	and	x3,x3,x12 // (b^c)&=(a^b)
 	add	x9,x9,x5 // d+=h
 	add	x5,x5,x0,ror#2 // h+=Sigma0(a)
 	eor	x3,x3,x7 // Maj(a,b,c)
 	add	x4,x4,x2 // h+=X[i]+K[i]
-		eor x2,x10,x11
-		eor x0,x9,x9,ror#5
+	eor	x2,x10,x11
+	eor	x0,x9,x9,ror#5
 	add	x5,x5,x3 // h+=Maj(a,b,c) from the past
-		and x2,x2,x9
+	and	x2,x2,x9
 	eor	x3,x0,x9,ror#19 // Sigma1(e)
-		eor x0,x5,x5,ror#11
+	eor	x0,x5,x5,ror#11
 	eor	x2,x2,x11 // Ch(e,f,g)
 	add	x4,x4,x3,ror#6 // h+=Sigma1(e)
 	eor	x3,x5,x6 // a^b, b^c in next round
 	eor	x0,x0,x5,ror#20 // Sigma0(a)
 	add	x4,x4,x2 // h+=Ch(e,f,g)
-		ldr x2,[sp,#64]
+	ldr	x2,[sp,#64]
 	and	x12,x12,x3 // (b^c)&=(a^b)
 	add	x8,x8,x4 // d+=h
 	add	x4,x4,x0,ror#2 // h+=Sigma0(a)
 	eor	x12,x12,x6 // Maj(a,b,c)
-		vst1.32 {v0},[x1,:128]!
+	vst1.32	{q8},[x1,:128]!
 #if 0
 @ Xpreload 'rotate' X[]
 #endif
 #if 0
 	@ after 4 Xpreloads
 #endif
-		ldr x0,[x2,#0]
-		add x4,x4,x12			@ h+=Maj(a,b,c) from the past
-		ldr x12,[x2,#4]
-		ldr x3,[x2,#8]
-		ldr x1,[x2,#12]
-		add x4,x4,x0			@ accumulate
-		ldr x0,[x2,#16]
-		add x5,x5,x12
-		ldr x12,[x2,#20]
-		add x6,x6,x3
-		ldr x3,[x2,#24]
-		add x7,x7,x1
-		ldr x1,[x2,#28]
-		add x8,x8,x0
-		str x4,[x2],#4
-		add x9,x9,x12
-		str x5,[x2],#4
-		add x10,x10,x3
-		str x6,[x2],#4
-		add x11,x11,x1
-		str x7,[x2],#4
-		stmia	x2,{x8-x11}
-	
-		ittte	ne
-		movne	x1,sp
-		ldrne	x2,[sp,#0]
-		eorne	x12,x12,x12
-		ldreq	sp,[sp,#76] 		@ restore original sp
-		itt ne
-		eorne	x3,x5,x6
-		bne .L_00_48
-	
-		//ldmia	sp!,{r4-r12,pc}
+	ldr	x0,[x2,#0]
+	add	x4,x4,x12			@ h+=Maj(a,b,c) from the past
+	ldr	x12,[x2,#4]
+	ldr	x3,[x2,#8]
+	ldr	x1,[x2,#12]
+	add	x4,x4,x0			@ accumulate
+	ldr	x0,[x2,#16]
+	add	x5,x5,x12
+	ldr	x12,[x2,#20]
+	add	x6,x6,x3
+	ldr	x3,[x2,#24]
+	add	x7,x7,x1
+	ldr	x1,[x2,#28]
+	add	x8,x8,x0
+	str	x4,[x2],#4
+	add	x9,x9,x12
+	str	x5,[x2],#4
+	add	x10,x10,x3
+	str	x6,[x2],#4
+	add	x11,x11,x1
+	str	x7,[x2],#4
+	stmia	x2,{x8-x11}
+
+	ittte	ne
+	movne	x1,sp
+	ldrne	x2,[sp,#0]
+	eorne	x12,x12,x12
+	ldreq	sp,[sp,#76]			@ restore original sp
+	itt	ne
+	eorne	x3,x5,x6
+	bne	.L_00_48
+
+	ldmia	sp!,{r4-r12,pc}
 
 	ret
 ENDPROC(sha256_neon_transform)

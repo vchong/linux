@@ -77,9 +77,9 @@
 	 *			  int blocks)
 	 */
 ENTRY(sha2_ce_transform)
-	/* load round constants */
+	/* load round constants in q0-q15 */
 	adr		x8, .Lsha2_rcon
-	ld1		{ v0.4s- v3.4s}, [x8], #64
+	ld1		{ v0.4s- v3.4s}, [x8], #64 //bytes
 	ld1		{ v4.4s- v7.4s}, [x8], #64
 	ld1		{ v8.4s-v11.4s}, [x8], #64
 	ld1		{v12.4s-v15.4s}, [x8]

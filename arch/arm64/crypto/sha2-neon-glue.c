@@ -55,31 +55,22 @@ static int sha256_neon_finup(struct shash_desc *desc, const u8 *data,
 	struct sha256_neon_state *sctx = shash_desc_ctx(desc);
 	bool finalize = !sctx->sst.count && !(len % SHA256_BLOCK_SIZE);
 
-	/*
-	 * Allow the asm code to perform the finalization if there is no
-	 * partial data and the input is a round multiple of the block size.
-	 */
 	sctx->finalize = finalize;
 
 	kernel_neon_begin_partial(28);
-	sha256_base_do_update(desc, data, len,
-			      (sha256_block_fn *)sha2_neon_transform);
-	if (!finalize)
-		sha256_base_do_finalize(desc,
-					(sha256_block_fn *)sha2_neon_transform);
+	if (len)
+		sha256_base_do_update(desc, data, len,
+			(sha256_block_fn *)sha2_neon_transform);
+	sha256_base_do_finalize(desc,
+			(sha256_block_fn *)sha2_neon_transform);
 	kernel_neon_end();
+
 	return sha256_base_finish(desc, out);
 }
 
 static int sha256_neon_final(struct shash_desc *desc, u8 *out)
 {
-	struct sha256_neon_state *sctx = shash_desc_ctx(desc);
-
-	sctx->finalize = 0;
-	kernel_neon_begin_partial(28);
-	sha256_base_do_finalize(desc, (sha256_block_fn *)sha2_neon_transform);
-	kernel_neon_end();
-	return sha256_base_finish(desc, out);
+	return sha256_neon_finup(desc, NULL, 0, out);
 }
 
 static struct shash_alg algs[] = { {
