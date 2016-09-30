@@ -18,6 +18,11 @@ config CRYPTO_SHA2_ARM64_CE
 	depends on ARM64 && KERNEL_MODE_NEON
 	select CRYPTO_HASH
 
+config CRYPTO_SHA2_ARM64_NEON
+	tristate "SHA-224/SHA-256 digest algorithm (ARMv8 NEON)"
+	depends on ARM64 && KERNEL_MODE_NEON
+	select CRYPTO_HASH
+
 config CRYPTO_GHASH_ARM64_CE
 	tristate "GHASH (for GCM chaining mode) using ARMv8 Crypto Extensions"
 	depends on ARM64 && KERNEL_MODE_NEON

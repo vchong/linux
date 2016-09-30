@@ -29,6 +29,9 @@ aes-ce-blk-y := aes-glue-ce.o aes-ce.o
 obj-$(CONFIG_CRYPTO_AES_ARM64_NEON_BLK) += aes-neon-blk.o
 aes-neon-blk-y := aes-glue-neon.o aes-neon.o
 
+obj-$(CONFIG_CRYPTO_SHA2_ARM64_NEON) += sha256-neon.o
+sha256-neon-y := sha256_neon_glue.o sha256-core.o
+
 AFLAGS_aes-ce.o		:= -DINTERLEAVE=4
 AFLAGS_aes-neon.o	:= -DINTERLEAVE=4
 
@@ -40,3 +43,11 @@ CFLAGS_crc32-arm64.o	:= -mcpu=generic+crc
 
 $(obj)/aes-glue-%.o: $(src)/aes-glue.c FORCE
 	$(call if_changed_rule,cc_o_c)
+
+quiet_cmd_perl = PERL    $@
+      cmd_perl = $(PERL) $(<) > $(@)
+
+$(src)/sha256-core.S_shipped: $(src)/sha256-armv4.pl
+	$(call cmd,perl)
+
+.PRECIOUS: $(obj)/sha256-core.S
