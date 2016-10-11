@@ -709,7 +709,7 @@
 			status = "ok";
 		};
 
-		spi0: spi@f7106000 {
+		spi_0: spi@f7106000 {
 			compatible = "arm,pl022", "arm,primecell";
 			reg = <0x0 0xf7106000 0x0 0x1000>;
 			interrupts = <0 50 4>;
