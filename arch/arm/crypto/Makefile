@@ -14,10 +14,16 @@ ce-obj-$(CONFIG_CRYPTO_SHA1_ARM_CE) += sha1-arm-ce.o
 ce-obj-$(CONFIG_CRYPTO_SHA2_ARM_CE) += sha2-arm-ce.o
 ce-obj-$(CONFIG_CRYPTO_GHASH_ARM_CE) += ghash-arm-ce.o
 
+#obj-y = builtin
+#obj-m = module
+#right?
+
 ifneq ($(ce-obj-y)$(ce-obj-m),)
 ifeq ($(call as-instr,.fpu crypto-neon-fp-armv8,y,n),y)
 obj-y += $(ce-obj-y)
 obj-m += $(ce-obj-m)
+$(info !!!!!! ce-obj-m = $(ce-obj-m) !!!!!!)
+$(info !!!!!! ce-obj-y = $(ce-obj-y) !!!!!!)
 else
 $(warning These ARMv8 Crypto Extensions modules need binutils 2.23 or higher)
 $(warning $(ce-obj-y) $(ce-obj-m))
