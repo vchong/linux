@@ -228,11 +228,15 @@ static DEFINE_PER_CPU(struct fpsimd_partial_state, softirq_fpsimdstate);
  */
 void kernel_neon_begin_partial(u32 num_regs)
 {
+	struct fpsimd_partial_state *s = this_cpu_ptr(
+		in_irq() ? &hardirq_fpsimdstate : &softirq_fpsimdstate);
+
 	if (in_interrupt()) {
-		struct fpsimd_partial_state *s = this_cpu_ptr(
-			in_irq() ? &hardirq_fpsimdstate : &softirq_fpsimdstate);
+		//struct fpsimd_partial_state *s = this_cpu_ptr(
+			//in_irq() ? &hardirq_fpsimdstate : &softirq_fpsimdstate);
 
 		BUG_ON(num_regs > 32);
+		//this is full save n restore
 		fpsimd_save_partial_state(s, roundup(num_regs, 2));
 	} else {
 		/*
@@ -241,22 +245,34 @@ void kernel_neon_begin_partial(u32 num_regs)
 		 * that there is no longer userland FPSIMD state in the
 		 * registers.
 		 */
+		//interrupt
 		preempt_disable();
+		#if 1
+		fpsimd_save_partial_state(s, roundup(num_regs, 2)); //still microbenchmarkg stead o da actual use case
+		#else
 		if (current->mm &&
 		    !test_and_set_thread_flag(TIF_FOREIGN_FPSTATE))
+		    //this is da lazy save, no need 2 restore, kernel will do tt in trap handler in later pt
 			fpsimd_save_state(&current->thread.fpsimd_state);
 		this_cpu_write(fpsimd_last_state, NULL);
+		#endif
 	}
 }
 EXPORT_SYMBOL(kernel_neon_begin_partial);
 
 void kernel_neon_end(void)
 {
+	struct fpsimd_partial_state *s = this_cpu_ptr(
+		in_irq() ? &hardirq_fpsimdstate : &softirq_fpsimdstate);
+
 	if (in_interrupt()) {
-		struct fpsimd_partial_state *s = this_cpu_ptr(
-			in_irq() ? &hardirq_fpsimdstate : &softirq_fpsimdstate);
+		//struct fpsimd_partial_state *s = this_cpu_ptr(
+			/in_irq() ? &hardirq_fpsimdstate : &softirq_fpsimdstate);
 		fpsimd_load_partial_state(s);
 	} else {
+		#if 1
+		fpsimd_load_partial_state(s);
+		#endif
 		preempt_enable();
 	}
 }
