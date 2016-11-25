@@ -726,7 +726,8 @@
 			status = "ok";
 
 			spidev@0 {
-				compatible = "linux,spidev";
+				//compatible = "spidev";
+				compatible = "hisilicon,hi6220-hikey", "hisilicon,hi6220";
 				spi-max-frequency = <500000>;
 				reg = <0>;
 			};
