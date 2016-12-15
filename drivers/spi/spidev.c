@@ -282,8 +282,9 @@ static int spidev_message(struct spidev_data *spidev,
 		k_tmp->speed_hz = u_tmp->speed_hz;
 		if (!k_tmp->speed_hz)
 			k_tmp->speed_hz = spidev->speed_hz;
-#ifdef VERBOSE
-		dev_dbg(&spidev->spi->dev,
+//#ifdef VERBOSE
+#if 1
+		printk(
 			"  xfer len %zd %s%s%s%dbits %u usec %uHz\n",
 			u_tmp->len,
 			u_tmp->rx_buf ? "rx " : "",
