@@ -220,6 +220,7 @@ struct ion_dma_buf_attachment {
 	struct sg_table *table;
 	struct list_head list;
 	enum dma_data_direction dir;
+	bool no_map;
 };
 
 static int ion_dma_buf_attach(struct dma_buf *dmabuf, struct device *dev,
@@ -238,6 +239,9 @@ static int ion_dma_buf_attach(struct dma_buf *dmabuf, struct device *dev,
 		kfree(a);
 		return -ENOMEM;
 	}
+
+	if (buffer->heap->type == ION_HEAP_TYPE_UNMAPPED)
+		a->no_map = true;
 
 	a->table = table;
 	a->dev = dev;
@@ -276,6 +280,9 @@ static struct sg_table *ion_map_dma_buf(struct dma_buf_attachment *attachment,
 
 	table = a->table;
 
+	if (a->no_map)
+		return table;
+
 	if (a->dir == direction)
 		dma_attr = DMA_ATTR_SKIP_CPU_SYNC;
 
@@ -294,6 +301,10 @@ static void ion_unmap_dma_buf(struct dma_buf_attachment *attachment,
 			      enum dma_data_direction direction)
 {
 	struct ion_dma_buf_attachment *a = attachment->priv;
+
+	if (a->no_map)
+		return;
+
 	unsigned long dma_attr = 0;
 
 	if (direction == a->dir)
