@@ -350,9 +350,33 @@ static int kirin_pcie_establish_link(struct pcie_port *pp)
 	return 0;
 }
 
+static irqreturn_t kirin_pcie_msi_irq_handler(int irq, void *arg)
+{
+	struct pcie_port *pp = arg;
+
+	return dw_handle_msi_irq(pp);
+}
+
+static void kirin_pcie_msi_init(struct pcie_port *pp)
+{
+	dw_pcie_msi_init(pp);
+
+}
+
+static void kirin_pcie_enable_interrupts(struct pcie_port *pp)
+{
+	if (IS_ENABLED(CONFIG_PCI_MSI))
+		kirin_pcie_msi_init(pp);
+}
+
 static void kirin_pcie_host_init(struct pcie_port *pp)
 {
-	kirin_pcie_establish_link(pp);
+	if (kirin_pcie_establish_link(pp))
+		return;
+
+	kirin_pcie_enable_interrupts(pp);
+
+	return;
 }
 
 static struct pcie_host_ops kirin_pcie_host_ops = {
@@ -368,6 +392,22 @@ static int __init kirin_add_pcie_port(struct pcie_port *pp,
 				      struct platform_device *pdev)
 {
 	int ret;
+
+	if (IS_ENABLED(CONFIG_PCI_MSI)) {
+		pp->msi_irq = platform_get_irq(pdev, 0);
+		if (!pp->msi_irq) {
+			dev_err(&pdev->dev, "failed to get msi irq\n");
+			return -ENODEV;
+		}
+		ret = devm_request_irq(&pdev->dev, pp->msi_irq,
+					kirin_pcie_msi_irq_handler,
+					IRQF_SHARED | IRQF_TRIGGER_RISING,
+					"kirin_pcie_msi", pp);
+		if (ret) {
+			dev_err(&pdev->dev, "failed to request msi irq\n");
+			return ret;
+		}
+	}
 
 	pp->root_bus_nr = -1;
 	pp->ops = &kirin_pcie_host_ops;
