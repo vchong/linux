@@ -54,6 +54,8 @@ static void kirin_fbdev_output_poll_changed(struct drm_device *dev)
 {
 	struct kirin_drm_private *priv = dev->dev_private;
 
+	dsi_set_output_client(dev);
+
 	if (priv->fbdev) {
 		drm_fbdev_cma_hotplug_event(priv->fbdev);
 	} else {

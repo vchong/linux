@@ -178,6 +178,7 @@ struct mipi_dsi_device {
 	unsigned int lanes;
 	enum mipi_dsi_pixel_format format;
 	unsigned long mode_flags;
+	u32 phy_clock; /* in kHz */
 };
 
 #define MIPI_DSI_MODULE_PREFIX "mipi-dsi:"

@@ -18,12 +18,16 @@
 #include <linux/clk.h>
 #include <linux/component.h>
 #include <linux/of_graph.h>
+#include <linux/iopoll.h>
+#include <video/mipi_display.h>
+#include <linux/gpio/consumer.h>
 
 #include <drm/drm_of.h>
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_mipi_dsi.h>
 #include <drm/drm_encoder_slave.h>
 #include <drm/drm_atomic_helper.h>
+#include <drm/drm_panel.h>
 
 #include "dw_dsi_reg.h"
 
@@ -37,6 +41,14 @@
 	container_of(encoder, struct dw_dsi, encoder)
 #define host_to_dsi(host) \
 	container_of(host, struct dw_dsi, host)
+#define connector_to_dsi(connector) \
+	container_of(connector, struct dw_dsi, connector)
+
+enum dsi_output_client {
+	OUT_HDMI = 0,
+	OUT_PANEL,
+	OUT_MAX
+};
 
 struct mipi_phy_params {
 	u32 clk_t_lpx;
@@ -78,10 +90,19 @@ struct dsi_hw_ctx {
 	struct clk *pclk;
 };
 
+struct dw_dsi_client {
+	u32 lanes;
+	u32 phy_clock; /* in kHz */
+	enum mipi_dsi_pixel_format format;
+	unsigned long mode_flags;
+};
+
 struct dw_dsi {
 	struct drm_encoder encoder;
 	struct drm_bridge *bridge;
+	struct drm_panel *panel;
 	struct mipi_dsi_host host;
+	struct drm_connector connector; /* connector for panel */
 	struct drm_display_mode cur_mode;
 	struct dsi_hw_ctx *ctx;
 	struct mipi_phy_params phy;
@@ -89,6 +110,9 @@ struct dw_dsi {
 	u32 lanes;
 	enum mipi_dsi_pixel_format format;
 	unsigned long mode_flags;
+	struct gpio_desc *gpio_mux;
+	struct dw_dsi_client client[OUT_MAX];
+	enum dsi_output_client cur_client;
 	bool enable;
 };
 
@@ -116,6 +140,51 @@ static const struct dsi_phy_range dphy_range_info[] = {
 	{  750000,  1000000,   1,    0 },
 	{ 1000000,  1500000,   0,    0 }
 };
+
+void dsi_set_output_client(struct drm_device *dev)
+{
+	enum dsi_output_client client;
+	struct drm_connector *connector;
+	struct drm_encoder *encoder;
+	struct dw_dsi *dsi;
+
+
+	mutex_lock(&dev->mode_config.mutex);
+
+	/* find dsi encoder */
+	drm_for_each_encoder(encoder, dev)
+		if (encoder->encoder_type == DRM_MODE_ENCODER_DSI)
+			break;
+	dsi = encoder_to_dsi(encoder);
+
+	/* find HDMI connector */
+	drm_for_each_connector(connector, dev)
+		if (connector->connector_type == DRM_MODE_CONNECTOR_HDMIA)
+			break;
+
+	/*
+	 * set the proper dsi output client
+	 */
+	client = connector->status == connector_status_connected ?
+		OUT_HDMI : OUT_PANEL;
+	if (client != dsi->cur_client) {
+		/* associate bridge and dsi encoder */
+		if (client == OUT_HDMI)
+			encoder->bridge = dsi->bridge;
+		else
+			encoder->bridge = NULL;
+
+		gpiod_set_value_cansleep(dsi->gpio_mux, client);
+		dsi->cur_client = client;
+		/* let the userspace know panel connector status has changed */
+		drm_sysfs_hotplug_event(dev);
+		DRM_INFO("client change to %s\n", client == OUT_HDMI ?
+				 "HDMI" : "panel");
+	}
+
+	mutex_unlock(&dev->mode_config.mutex);
+}
+EXPORT_SYMBOL(dsi_set_output_client);
 
 static u32 dsi_calc_phy_rate(u32 req_kHz, struct mipi_phy_params *phy)
 {
@@ -430,13 +499,12 @@ static void dsi_set_mipi_phy(void __iomem *base,
 	 * wait for phy's clock ready
 	 */
 	delay_count = 100;
-	while (delay_count) {
+	while (delay_count--) {
 		val = readl(base +  PHY_STATUS);
 		if ((BIT(0) | BIT(2)) & val)
 			break;
 
 		udelay(1);
-		delay_count--;
 	}
 
 	if (!delay_count)
@@ -501,11 +569,11 @@ static void dsi_set_mode_timing(void __iomem *base,
 	writel(mode->vdisplay, base + VID_VACTIVE_LINES);
 	writel(mode->hdisplay, base + VID_PKT_SIZE);
 
-	DRM_DEBUG_DRIVER("htot=%d, hfp=%d, hbp=%d, hsw=%d\n",
+	DRM_INFO("htot=%d, hfp=%d, hbp=%d, hsw=%d\n",
 			 htot, hfp, hbp, hsw);
-	DRM_DEBUG_DRIVER("vtol=%d, vfp=%d, vbp=%d, vsw=%d\n",
+	DRM_INFO("vtol=%d, vfp=%d, vbp=%d, vsw=%d\n",
 			 vtot, vfp, vbp, vsw);
-	DRM_DEBUG_DRIVER("hsa_time=%d, hbp_time=%d, hline_time=%d\n",
+	DRM_INFO("hsa_time=%d, hbp_time=%d, hline_time=%d\n",
 			 hsa_time, hbp_time, hline_time);
 }
 
@@ -526,45 +594,71 @@ static void dsi_set_video_mode(void __iomem *base, unsigned long flags)
 	else if ((flags & mode_mask) == non_burst_sync_event)
 		val = DSI_NON_BURST_SYNC_EVENTS;
 	else
-		val = DSI_BURST_SYNC_PULSES_1;
-	writel(val, base + VID_MODE_CFG);
+		val = DSI_BURST_SYNC_PULSES_1 | (0x3f << 8);
 
+	writel(val, base + VID_MODE_CFG);
 	writel(PHY_TXREQUESTCLKHS, base + LPCLK_CTRL);
-	writel(DSI_VIDEO_MODE, base + MODE_CFG);
 }
 
+static void dsi_set_command_mode(void __iomem *base)
+{
+	writel(CMD_MODE_ALL_LP, base + CMD_MODE_CFG);
+	writel(DSI_COMMAND_MODE, base + MODE_CFG);
+}
+
+static void dw_dsi_set_mode(struct dw_dsi *dsi, enum dsi_work_mode mode)
+{
+	struct dsi_hw_ctx *ctx = dsi->ctx;
+	void __iomem *base = ctx->base;
+
+	writel(RESET, base + PWR_UP);
+	writel(mode, base + MODE_CFG);
+	writel(POWERUP, base + PWR_UP);
+}
 static void dsi_mipi_init(struct dw_dsi *dsi)
 {
 	struct dsi_hw_ctx *ctx = dsi->ctx;
 	struct mipi_phy_params *phy = &dsi->phy;
 	struct drm_display_mode *mode = &dsi->cur_mode;
-	u32 bpp = mipi_dsi_pixel_format_to_bpp(dsi->format);
 	void __iomem *base = ctx->base;
+	u32 id = dsi->cur_client;
 	u32 dphy_req_kHz;
+	int bpp;
 
 	/*
 	 * count phy params
 	 */
-	dphy_req_kHz = mode->clock * bpp / dsi->lanes;
+	bpp = mipi_dsi_pixel_format_to_bpp(dsi->client[id].format);
+	if (bpp < 0)
+		return;
+	if (dsi->client[id].phy_clock)
+		dphy_req_kHz = dsi->client[id].phy_clock;
+	else
+		dphy_req_kHz = mode->clock * bpp / dsi->client[id].lanes;
 	dsi_get_phy_params(dphy_req_kHz, phy);
 
 	/* reset Core */
 	writel(RESET, base + PWR_UP);
 
 	/* set dsi phy params */
-	dsi_set_mipi_phy(base, phy, dsi->lanes);
+	dsi_set_mipi_phy(base, phy, dsi->client[id].lanes);
 
 	/* set dsi mode timing */
-	dsi_set_mode_timing(base, phy->lane_byte_clk_kHz, mode, dsi->format);
+	dsi_set_mode_timing(base, phy->lane_byte_clk_kHz, mode,
+			    dsi->client[id].format);
 
 	/* set dsi video mode */
-	dsi_set_video_mode(base, dsi->mode_flags);
+	dsi_set_video_mode(base, dsi->client[id].mode_flags);
+
+	/* set command mode */
+	dsi_set_command_mode(base);
 
 	/* dsi wake up */
 	writel(POWERUP, base + PWR_UP);
 
 	DRM_DEBUG_DRIVER("lanes=%d, pixel_clk=%d kHz, bytes_freq=%d kHz\n",
-			 dsi->lanes, mode->clock, phy->lane_byte_clk_kHz);
+			 dsi->client[id].lanes, mode->clock,
+			 phy->lane_byte_clk_kHz);
 }
 
 static void dsi_encoder_disable(struct drm_encoder *encoder)
@@ -575,6 +669,15 @@ static void dsi_encoder_disable(struct drm_encoder *encoder)
 
 	if (!dsi->enable)
 		return;
+
+	dw_dsi_set_mode(dsi, DSI_COMMAND_MODE);
+	/* turn off panel's backlight */
+	if (dsi->panel && drm_panel_disable(dsi->panel))
+		DRM_ERROR("failed to disaable panel\n");
+
+	/* turn off panel */
+	if (dsi->panel && drm_panel_unprepare(dsi->panel))
+		DRM_ERROR("failed to unprepare panel\n");
 
 	writel(0, base + PWR_UP);
 	writel(0, base + LPCLK_CTRL);
@@ -600,6 +703,16 @@ static void dsi_encoder_enable(struct drm_encoder *encoder)
 	}
 
 	dsi_mipi_init(dsi);
+
+	/* turn on panel */
+	if (dsi->panel && drm_panel_prepare(dsi->panel))
+		DRM_ERROR("failed to prepare panel\n");
+
+	dw_dsi_set_mode(dsi, DSI_VIDEO_MODE);
+
+	/* turn on panel's back light */
+	if (dsi->panel && drm_panel_enable(dsi->panel))
+		DRM_ERROR("failed to enable panel\n");
 
 	dsi->enable = true;
 }
@@ -661,15 +774,19 @@ static int dsi_host_attach(struct mipi_dsi_host *host,
 			   struct mipi_dsi_device *mdsi)
 {
 	struct dw_dsi *dsi = host_to_dsi(host);
+	u32 id = mdsi->channel >= 1 ? OUT_PANEL : OUT_HDMI;
 
 	if (mdsi->lanes < 1 || mdsi->lanes > 4) {
 		DRM_ERROR("dsi device params invalid\n");
 		return -EINVAL;
 	}
 
-	dsi->lanes = mdsi->lanes;
-	dsi->format = mdsi->format;
-	dsi->mode_flags = mdsi->mode_flags;
+	dsi->client[id].lanes = mdsi->lanes;
+	dsi->client[id].format = mdsi->format;
+	dsi->client[id].mode_flags = mdsi->mode_flags;
+	dsi->client[id].phy_clock = mdsi->phy_clock;
+
+	DRM_INFO("host attach, client name=[%s], id=%d\n", mdsi->name, id);
 
 	return 0;
 }
@@ -681,9 +798,114 @@ static int dsi_host_detach(struct mipi_dsi_host *host,
 	return 0;
 }
 
+static int dsi_gen_pkt_hdr_write(void __iomem *base, u32 val)
+{
+	u32 status;
+	int ret;
+
+	ret = readx_poll_timeout(readl, base + CMD_PKT_STATUS, status,
+				 !(status & GEN_CMD_FULL), 1000,
+				 CMD_PKT_STATUS_TIMEOUT_US);
+	if (ret < 0) {
+		DRM_ERROR("failed to get available command FIFO\n");
+		return ret;
+	}
+
+	writel(val, base + GEN_HDR);
+
+	ret = readx_poll_timeout(readl, base + CMD_PKT_STATUS, status,
+				 status & (GEN_CMD_EMPTY | GEN_PLD_W_EMPTY),
+				 1000, CMD_PKT_STATUS_TIMEOUT_US);
+	if (ret < 0) {
+		DRM_ERROR("failed to write command FIFO\n");
+		return ret;
+	}
+
+	return 0;
+}
+
+static int dsi_dcs_short_write(void __iomem *base,
+			       const struct mipi_dsi_msg *msg)
+{
+	const u16 *tx_buf = msg->tx_buf;
+	u32 val = GEN_HDATA(*tx_buf) | GEN_HTYPE(msg->type);
+
+	if (msg->tx_len > 2) {
+		DRM_ERROR("too long tx buf length %zu for short write\n",
+			  msg->tx_len);
+		return -EINVAL;
+	}
+
+	return dsi_gen_pkt_hdr_write(base, val);
+}
+
+static int dsi_dcs_long_write(void __iomem *base,
+			      const struct mipi_dsi_msg *msg)
+{
+	const u32 *tx_buf = msg->tx_buf;
+	int len = msg->tx_len, pld_data_bytes = sizeof(*tx_buf), ret;
+	u32 val = GEN_HDATA(msg->tx_len) | GEN_HTYPE(msg->type);
+	u32 remainder = 0;
+	u32 status;
+
+	if (msg->tx_len < 3) {
+		DRM_ERROR("wrong tx buf length %zu for long write\n",
+			  msg->tx_len);
+		return -EINVAL;
+	}
+
+	while (DIV_ROUND_UP(len, pld_data_bytes)) {
+		if (len < pld_data_bytes) {
+			memcpy(&remainder, tx_buf, len);
+			writel(remainder, base + GEN_PLD_DATA);
+			len = 0;
+		} else {
+			writel(*tx_buf, base + GEN_PLD_DATA);
+			tx_buf++;
+			len -= pld_data_bytes;
+		}
+
+		ret = readx_poll_timeout(readl, base + CMD_PKT_STATUS,
+					 status, !(status & GEN_PLD_W_FULL), 1000,
+					 CMD_PKT_STATUS_TIMEOUT_US);
+		if (ret < 0) {
+			DRM_ERROR("failed to get available write payload FIFO\n");
+			return ret;
+		}
+	}
+
+	return dsi_gen_pkt_hdr_write(base, val);
+}
+
+static ssize_t dsi_host_transfer(struct mipi_dsi_host *host,
+				    const struct mipi_dsi_msg *msg)
+{
+	struct dw_dsi *dsi = host_to_dsi(host);
+	struct dsi_hw_ctx *ctx = dsi->ctx;
+	void __iomem *base = ctx->base;
+	int ret;
+
+	switch (msg->type) {
+	case MIPI_DSI_DCS_SHORT_WRITE:
+	case MIPI_DSI_DCS_SHORT_WRITE_PARAM:
+	case MIPI_DSI_SET_MAXIMUM_RETURN_PACKET_SIZE:
+		ret = dsi_dcs_short_write(base, msg);
+		break;
+	case MIPI_DSI_DCS_LONG_WRITE:
+		ret = dsi_dcs_long_write(base, msg);
+		break;
+	default:
+		DRM_ERROR("unsupported message type\n");
+		ret = -EINVAL;
+	}
+
+	return ret;
+}
+
 static const struct mipi_dsi_host_ops dsi_host_ops = {
 	.attach = dsi_host_attach,
 	.detach = dsi_host_detach,
+	.transfer = dsi_host_transfer,
 };
 
 static int dsi_host_init(struct device *dev, struct dw_dsi *dsi)
@@ -709,7 +931,6 @@ static int dsi_bridge_init(struct drm_device *dev, struct dw_dsi *dsi)
 	int ret;
 
 	/* associate the bridge to dsi encoder */
-	encoder->bridge = bridge;
 	bridge->encoder = encoder;
 
 	ret = drm_bridge_attach(dev, bridge);
@@ -721,6 +942,91 @@ static int dsi_bridge_init(struct drm_device *dev, struct dw_dsi *dsi)
 	return 0;
 }
 
+static int dsi_connector_get_modes(struct drm_connector *connector)
+{
+	struct dw_dsi *dsi = connector_to_dsi(connector);
+
+	return drm_panel_get_modes(dsi->panel);
+}
+
+static enum drm_mode_status
+dsi_connector_mode_valid(struct drm_connector *connector,
+			 struct drm_display_mode *mode)
+{
+	enum drm_mode_status mode_status = MODE_OK;
+
+	return mode_status;
+}
+
+static struct drm_encoder *
+dsi_connector_best_encoder(struct drm_connector *connector)
+{
+	struct dw_dsi *dsi = connector_to_dsi(connector);
+
+	return &dsi->encoder;
+}
+
+static struct drm_connector_helper_funcs dsi_connector_helper_funcs = {
+	.get_modes = dsi_connector_get_modes,
+	.mode_valid = dsi_connector_mode_valid,
+	.best_encoder = dsi_connector_best_encoder,
+};
+
+static enum drm_connector_status
+dsi_connector_detect(struct drm_connector *connector, bool force)
+{
+	struct dw_dsi *dsi = connector_to_dsi(connector);
+	enum drm_connector_status status;
+
+	status = dsi->cur_client == OUT_PANEL ?	connector_status_connected :
+		connector_status_disconnected;
+
+	return status;
+}
+
+static void dsi_connector_destroy(struct drm_connector *connector)
+{
+	drm_connector_unregister(connector);
+	drm_connector_cleanup(connector);
+}
+
+static struct drm_connector_funcs dsi_atomic_connector_funcs = {
+	.dpms = drm_atomic_helper_connector_dpms,
+	.fill_modes = drm_helper_probe_single_connector_modes,
+	.detect = dsi_connector_detect,
+	.destroy = dsi_connector_destroy,
+	.reset = drm_atomic_helper_connector_reset,
+	.atomic_duplicate_state = drm_atomic_helper_connector_duplicate_state,
+	.atomic_destroy_state = drm_atomic_helper_connector_destroy_state,
+};
+
+static int dsi_connector_init(struct drm_device *dev, struct dw_dsi *dsi)
+{
+	struct drm_encoder *encoder = &dsi->encoder;
+	struct drm_connector *connector = &dsi->connector;
+	int ret;
+
+	connector->polled = DRM_CONNECTOR_POLL_HPD;
+	drm_connector_helper_add(connector,
+				 &dsi_connector_helper_funcs);
+
+	ret = drm_connector_init(dev, &dsi->connector,
+				 &dsi_atomic_connector_funcs,
+				 DRM_MODE_CONNECTOR_DSI);
+	if (ret)
+		return ret;
+
+	ret = drm_mode_connector_attach_encoder(connector, encoder);
+	if (ret)
+		return ret;
+
+	ret = drm_panel_attach(dsi->panel, connector);
+	if (ret)
+		return ret;
+
+	DRM_INFO("connector init\n");
+	return 0;
+}
 static int dsi_bind(struct device *dev, struct device *master, void *data)
 {
 	struct dsi_data *ddata = dev_get_drvdata(dev);
@@ -732,13 +1038,17 @@ static int dsi_bind(struct device *dev, struct device *master, void *data)
 	if (ret)
 		return ret;
 
-	ret = dsi_host_init(dev, dsi);
-	if (ret)
-		return ret;
+	if (dsi->bridge) {
+		ret = dsi_bridge_init(drm_dev, dsi);
+		if (ret)
+			return ret;
+	}
 
-	ret = dsi_bridge_init(drm_dev, dsi);
-	if (ret)
-		return ret;
+	if (dsi->panel) {
+		ret = dsi_connector_init(drm_dev, dsi);
+		if (ret)
+			return ret;
+	}
 
 	return 0;
 }
@@ -753,24 +1063,11 @@ static const struct component_ops dsi_ops = {
 	.unbind	= dsi_unbind,
 };
 
-static int dsi_parse_dt(struct platform_device *pdev, struct dw_dsi *dsi)
+static int dsi_parse_bridge_endpoint(struct dw_dsi *dsi,
+				     struct device_node *endpoint)
 {
-	struct dsi_hw_ctx *ctx = dsi->ctx;
-	struct device_node *np = pdev->dev.of_node;
-	struct device_node *endpoint, *bridge_node;
+	struct device_node *bridge_node;
 	struct drm_bridge *bridge;
-	struct resource *res;
-
-	/*
-	 * Get the endpoint node. In our case, dsi has one output port1
-	 * to which the external HDMI bridge is connected.
-	 */
-	endpoint = of_graph_get_endpoint_by_regs(np, 1, -1);
-	if (!endpoint) {
-		DRM_ERROR("no valid endpoint node\n");
-		return -ENODEV;
-	}
-	of_node_put(endpoint);
 
 	bridge_node = of_graph_get_remote_port_parent(endpoint);
 	if (!bridge_node) {
@@ -786,6 +1083,88 @@ static int dsi_parse_dt(struct platform_device *pdev, struct dw_dsi *dsi)
 	}
 	dsi->bridge = bridge;
 
+	return 0;
+}
+
+static int dsi_parse_panel_endpoint(struct dw_dsi *dsi,
+				    struct device_node *endpoint)
+{
+	struct device_node *panel_node;
+	struct drm_panel *panel;
+
+	panel_node = of_graph_get_remote_port_parent(endpoint);
+	if (!panel_node) {
+		DRM_ERROR("no valid panel node\n");
+		return -ENODEV;
+	}
+	of_node_put(panel_node);
+
+	panel = of_drm_find_panel(panel_node);
+	if (!panel) {
+		DRM_DEBUG_DRIVER("skip this panel endpoint.\n");
+		return 0;
+	}
+	dsi->panel = panel;
+
+	return 0;
+}
+
+static int dsi_parse_endpoint(struct dw_dsi *dsi,
+			      struct device_node *np,
+			      enum dsi_output_client client)
+{
+	struct device_node *ep_node;
+	struct of_endpoint ep;
+	int ret = 0;
+
+	if (client == OUT_MAX)
+		return -EINVAL;
+
+	for_each_endpoint_of_node(np, ep_node) {
+		ret = of_graph_parse_endpoint(ep_node, &ep);
+		if (ret) {
+			of_node_put(ep_node);
+			return ret;
+		}
+
+		/* skip dsi input port, port == 0 is input port */
+		if (ep.port == 0)
+			continue;
+
+		/* parse bridge endpoint */
+		if (client == OUT_HDMI) {
+			if (ep.id == 0) {
+				ret = dsi_parse_bridge_endpoint(dsi, ep_node);
+				if (dsi->bridge)
+					break;
+			}
+		} else { /* parse panel endpoint */
+			if (ep.id > 0) {
+				ret = dsi_parse_panel_endpoint(dsi, ep_node);
+				if (dsi->panel)
+					break;
+			}
+		}
+
+		if (ret) {
+			of_node_put(ep_node);
+			return ret;
+		}
+	}
+
+	if (!dsi->bridge && !dsi->panel) {
+		DRM_ERROR("at least one bridge or panel node is required\n");
+		return -ENODEV;
+	}
+
+	return 0;
+}
+
+static int dsi_parse_dt(struct platform_device *pdev, struct dw_dsi *dsi)
+{
+	struct dsi_hw_ctx *ctx = dsi->ctx;
+	struct resource *res;
+
 	ctx->pclk = devm_clk_get(&pdev->dev, "pclk");
 	if (IS_ERR(ctx->pclk)) {
 		DRM_ERROR("failed to get pclk clock\n");
@@ -799,17 +1178,25 @@ static int dsi_parse_dt(struct platform_device *pdev, struct dw_dsi *dsi)
 		return PTR_ERR(ctx->base);
 	}
 
+	dsi->gpio_mux = devm_gpiod_get(&pdev->dev, "mux", GPIOD_OUT_HIGH);
+	if (IS_ERR(dsi->gpio_mux))
+		return PTR_ERR(dsi->gpio_mux);
+	/* set dsi default output to panel */
+	dsi->cur_client = OUT_PANEL;
+
 	return 0;
 }
 
 static int dsi_probe(struct platform_device *pdev)
 {
+	struct device_node *np = pdev->dev.of_node;
+	struct device *dev = &pdev->dev;
 	struct dsi_data *data;
 	struct dw_dsi *dsi;
 	struct dsi_hw_ctx *ctx;
 	int ret;
 
-	data = devm_kzalloc(&pdev->dev, sizeof(*data), GFP_KERNEL);
+	data = devm_kzalloc(dev, sizeof(*data), GFP_KERNEL);
 	if (!data) {
 		DRM_ERROR("failed to allocate dsi data.\n");
 		return -ENOMEM;
@@ -818,13 +1205,35 @@ static int dsi_probe(struct platform_device *pdev)
 	ctx = &data->ctx;
 	dsi->ctx = ctx;
 
-	ret = dsi_parse_dt(pdev, dsi);
+	/* parse HDMI bridge endpoint */
+	ret = dsi_parse_endpoint(dsi, np, OUT_HDMI);
 	if (ret)
 		return ret;
 
+	ret = dsi_host_init(dev, dsi);
+	if (ret)
+		return ret;
+
+	/* parse panel endpoint */
+	ret = dsi_parse_endpoint(dsi, np, OUT_PANEL);
+	if (ret)
+		goto err_host_unregister;
+
+	ret = dsi_parse_dt(pdev, dsi);
+	if (ret)
+		goto err_host_unregister;
+
 	platform_set_drvdata(pdev, data);
 
-	return component_add(&pdev->dev, &dsi_ops);
+	ret = component_add(dev, &dsi_ops);
+	if (ret)
+		goto err_host_unregister;
+
+	return 0;
+
+err_host_unregister:
+	mipi_dsi_host_unregister(&dsi->host);
+	return ret;
 }
 
 static int dsi_remove(struct platform_device *pdev)
