@@ -390,6 +390,8 @@ static int hisi_pixel_format_hal2dma(int format)
 		break;
 	case HISI_FB_PIXEL_FORMAT_RGBA_8888:
 	case HISI_FB_PIXEL_FORMAT_BGRA_8888:
+	case HISI_FB_PIXEL_FORMAT_ARGB_8888:
+	case HISI_FB_PIXEL_FORMAT_ABGR_8888:
 		ret = DMA_PIXEL_FORMAT_ARGB_8888;
 		break;
 
@@ -454,6 +456,9 @@ static int hisi_pixel_format_hal2dfc(int format)
 	case HISI_FB_PIXEL_FORMAT_RGBA_8888:
 		ret = DFC_PIXEL_FORMAT_ABGR_8888;
 		break;
+	case HISI_FB_PIXEL_FORMAT_ARGB_8888:
+		ret = DFC_PIXEL_FORMAT_ARGB_8888;
+		break;
 
 	case HISI_FB_PIXEL_FORMAT_BGR_565:
 		ret = DFC_PIXEL_FORMAT_BGR_565;
@@ -475,6 +480,9 @@ static int hisi_pixel_format_hal2dfc(int format)
 		break;
 	case HISI_FB_PIXEL_FORMAT_BGRA_8888:
 		ret = DFC_PIXEL_FORMAT_ARGB_8888;
+		break;
+	case HISI_FB_PIXEL_FORMAT_ABGR_8888:
+		ret = DFC_PIXEL_FORMAT_ABGR_8888;
 		break;
 
 	case HISI_FB_PIXEL_FORMAT_YUV_422_I:
