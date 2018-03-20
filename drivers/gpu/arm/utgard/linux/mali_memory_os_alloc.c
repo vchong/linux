@@ -27,7 +27,7 @@
 #define MALI_OS_MEMORY_POOL_TRIM_JIFFIES (10 * CONFIG_HZ) /* Default to 10s */
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 8, 0)
-static unsigned long dma_attrs_wc= 0;
+static unsigned long dma_attrs_wc = 0;
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
 /* Write combine dma_attrs */
 static DEFINE_DMA_ATTRS(dma_attrs_wc);
@@ -562,8 +562,8 @@ void mali_mem_os_release_table_page(mali_dma_addr phys, void *virt)
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 8, 0)
 		dma_free_attrs(&mali_platform_device->dev,
-			     _MALI_OSK_MALI_PAGE_SIZE, virt, phys,
-			     dma_attrs_wc);
+			       _MALI_OSK_MALI_PAGE_SIZE, virt, phys,
+			       dma_attrs_wc);
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
 		dma_free_attrs(&mali_platform_device->dev,
 			       _MALI_OSK_MALI_PAGE_SIZE, virt, phys,
@@ -622,7 +622,7 @@ static void mali_mem_os_page_table_pool_free(size_t nr_to_free)
 	for (i = 0; i < nr_to_free; i++) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 8, 0)
 		dma_free_attrs(&mali_platform_device->dev, _MALI_OSK_MALI_PAGE_SIZE,
-		   	      virt_arr[i], (dma_addr_t)phys_arr[i], dma_attrs_wc);
+			       virt_arr[i], (dma_addr_t)phys_arr[i], dma_attrs_wc);
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
 		dma_free_attrs(&mali_platform_device->dev, _MALI_OSK_MALI_PAGE_SIZE,
 			       virt_arr[i], (dma_addr_t)phys_arr[i], &dma_attrs_wc);
