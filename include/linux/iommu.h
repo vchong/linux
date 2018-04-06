@@ -123,6 +123,7 @@ enum iommu_attr {
 	DOMAIN_ATTR_MAX,
 };
 
+#ifdef CONFIG_HISI_IOMMU
 /* metadata for iommu mapping */
 struct iommu_map_format {
 	unsigned long iova_start;
@@ -142,6 +143,7 @@ struct tile_format {
 	unsigned long phys_page_line;
 	unsigned long virt_page_line;
 };
+#endif
 
 /**
  * struct iommu_dm_region - descriptor for a direct mapped memory region
