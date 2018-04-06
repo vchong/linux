@@ -536,8 +536,7 @@ void optee_free_pages_list(void *list, size_t num_entries)
 }
 
 int optee_shm_register(struct tee_context *ctx, struct tee_shm *shm,
-		       struct page **pages, size_t num_pages,
-		       unsigned long start)
+		       struct page **pages, size_t num_pages)
 {
 	struct tee_shm *shm_arg = NULL;
 	struct optee_msg_arg *msg_arg;
@@ -607,8 +606,7 @@ int optee_shm_unregister(struct tee_context *ctx, struct tee_shm *shm)
 }
 
 int optee_shm_register_supp(struct tee_context *ctx, struct tee_shm *shm,
-			    struct page **pages, size_t num_pages,
-			    unsigned long start)
+			    struct page **pages, size_t num_pages)
 {
 	/*
 	 * We don't want to register supplicant memory in OP-TEE.
