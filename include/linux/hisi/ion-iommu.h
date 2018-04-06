@@ -59,12 +59,12 @@ static inline phys_addr_t hisi_iommu_domain_iova_to_phys(unsigned long iova)
 {
 	return 0;
 }
-static inline unsigned int hisi_iommu_page_size (void)
+unsigned int hisi_iommu_page_size (void)
 {
 	return SZ_4K;
 }
 
-static inline bool hisi_iommu_off_on(void)
+bool hisi_iommu_off_on(void)
 {
 	return false;
 }
