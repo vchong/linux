@@ -136,7 +136,6 @@ u32 optee_do_call_with_arg(struct tee_context *ctx, phys_addr_t parg)
 	struct optee *optee = tee_get_drvdata(ctx->teedev);
 	struct optee_call_waiter w;
 	struct optee_rpc_param param = { };
-	struct optee_call_ctx call_ctx = { };
 	u32 ret;
 
 	param.a0 = OPTEE_SMC_CALL_WITH_ARG;
@@ -161,14 +160,13 @@ u32 optee_do_call_with_arg(struct tee_context *ctx, phys_addr_t parg)
 			param.a1 = res.a1;
 			param.a2 = res.a2;
 			param.a3 = res.a3;
-			optee_handle_rpc(ctx, &param, &call_ctx);
+			optee_handle_rpc(ctx, &param);
 		} else {
 			ret = res.a0;
 			break;
 		}
 	}
 
-	optee_rpc_finalize_call(&call_ctx);
 	/*
 	 * We're done with our thread in secure world, if there's any
 	 * thread waiters wake up one.
@@ -603,19 +601,4 @@ int optee_shm_unregister(struct tee_context *ctx, struct tee_shm *shm)
 		rc = -EINVAL;
 	tee_shm_free(shm_arg);
 	return rc;
-}
-
-int optee_shm_register_supp(struct tee_context *ctx, struct tee_shm *shm,
-			    struct page **pages, size_t num_pages)
-{
-	/*
-	 * We don't want to register supplicant memory in OP-TEE.
-	 * Instead information about it will be passed in RPC code.
-	 */
-	return 0;
-}
-
-int optee_shm_unregister_supp(struct tee_context *ctx, struct tee_shm *shm)
-{
-	return 0;
 }
