@@ -3231,7 +3231,6 @@ again:
 		dwc2_core_init(hsotg, false);
 		dwc2_enable_global_interrupts(hsotg);
 		spin_lock_irqsave(&hsotg->lock, flags);
-		dwc2_hsotg_disconnect(hsotg);
 		dwc2_hsotg_core_init_disconnected(hsotg, false);
 		spin_unlock_irqrestore(&hsotg->lock, flags);
 		dwc2_hsotg_core_connect(hsotg);
@@ -3252,7 +3251,6 @@ again:
 
 		spin_lock_irqsave(&hsotg->lock, flags);
 		dwc2_hsotg_disconnect(hsotg);
-		dwc2_hsotg_core_init_disconnected(hsotg, false);
 		spin_unlock_irqrestore(&hsotg->lock, flags);
 
 		hsotg->op_state = OTG_STATE_A_HOST;
