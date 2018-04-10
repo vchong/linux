@@ -56,28 +56,11 @@ static struct ion_platform_heap dummy_heaps[] = {
 			.align	= SZ_16K,
 			.priv	= (void *)(SZ_16K),
 		},
-		{
-			.id	= ION_HEAP_TYPE_DMA,
-			.type	= ION_HEAP_TYPE_DMA,
-			.name	= "cma",
-		},
 };
 
 static struct ion_platform_data dummy_ion_pdata = {
 	.nr = ARRAY_SIZE(dummy_heaps),
 	.heaps = dummy_heaps,
-};
-
-static u64 dummy_dmamask = DMA_BIT_MASK(32);
-
-static struct platform_device ion_cma_device = {
-	.name = "ion-cma-device",
-	.id = -1,
-	.dev = {
-		.init_name = "ion-cma-device",
-		.dma_mask = &dummy_dmamask,
-		.coherent_dma_mask = DMA_BIT_MASK(32),
-	}
 };
 
 static int __init ion_dummy_init(void)
@@ -119,11 +102,6 @@ static int __init ion_dummy_init(void)
 
 		if (heap_data->type == ION_HEAP_TYPE_CHUNK && !heap_data->base)
 			continue;
-
-		if (heap_data->type == ION_HEAP_TYPE_DMA) {
-			arch_setup_dma_ops(&ion_cma_device.dev, 0, DMA_BIT_MASK(32), NULL, true);
-			heap_data->priv = (void *)&ion_cma_device.dev;
-		}
 
 		heaps[i] = ion_heap_create(heap_data);
 		if (IS_ERR_OR_NULL(heaps[i])) {
