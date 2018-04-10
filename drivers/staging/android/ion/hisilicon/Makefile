@@ -1,2 +1,1 @@
-ccflags-y += -I$(srctree)/drivers/staging/android
-obj-y     += hisi_ion.o
+obj-$(CONFIG_HI6220_ION) += hi6220_ion.o
