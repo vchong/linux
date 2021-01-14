@@ -1,0 +1,151 @@
+original f optee_android_manifest 3.4 release
+
+6e1bf2a29dae (HEAD) tee: fix unbalanced context refcount in register shm from fd
+50655502bf6b tee: optee: log message if dynamic shm is enabled
+fcd747efa152 staging:ion: add a no-map property to ion dmabuf attachment
+7e3cf3ff018b staging/ion: ARM64 supports ION_UNMAPPED_HEAP
+b1e3c42a48cf staging/ion: condition unmapped heap to supported architectures
+d40757eb549d ion: "unmapped" heap for secure data path
+3fd5bdc31d73 staging/ion: add Allwinner ION "secure" heap
+c4c09007fe55 tee: optee: store OP-TEE capabilities in private data
+44b0468decad tee: optee: Update protocol definitions
+14c63582d03e tee: new ioctl to a register tee_shm from a dmabuf file descriptor
+89b5b3848592 tee: use reference counting for tee_context
+34369944c4e2 tee: add register user memory
+4d91c112b7d6 tee: flexible shared memory pool creation
+39b8b68d61d9 hikey_defconfig: enable dummy ION memory in kernel config
+714759b655e5 hikey: Enable OPTEE in defconfig
+256f07b4dc5a adv7511: Add more modes to HiKey whitelist
+7f5e1e75938e Revert "drm/hisilicon: Ensure LDI regs are properly configured."
+7edc44ec5289 (m/android-9.0.0_r30) Merge changes Ic7ce3dde,I3a9998d4 into android-hikey-linaro-4.14
+
+===================
+
+pick 84debcc53533 tee: add tee_param_is_memref() for driver use
+pick f2aa97240c84 tee: add TEE_IOCTL_PARAM_ATTR_META
+pick 1647a5ac1754 optee: support asynchronous supplicant requests
+pick e2aca5d8928a tee: flexible shared memory pool creation
+pick 033ddf12bcf5 tee: add register user memory
+pick b25946ad951c tee: shm: add accessors for buffer size and page offset
+pick e0c69ae8bfb5 tee: shm: add page accessor functions
+pick de5c6dfc43da tee: optee: Update protocol definitions
+pick 3bb48ba5cd60 tee: optee: add page list manipulation functions
+pick 06ca79179c4e tee: optee: add shared buffer registration functions
+pick 64cf9d8a672e tee: optee: add registered shared parameters handling
+pick 53a107c812de tee: optee: add registered buffers handling into RPC calls
+pick d885cc5e0759 tee: optee: store OP-TEE capabilities in private data
+pick abd135ba215c tee: optee: add optee-specific shared pool implementation
+pick f58e236c9d66 tee: optee: enable dynamic SHM support
+pick 217e0250cccb tee: use reference counting for tee_context
+pick ef8e08d24ca8 tee: shm: inline tee_shm_get_id()
+pick f681e08f671a tee: optee: fix header dependencies
+pick 95ffe4ca4387 tee: add start argument to shm_register callback
+pick cdbcf83d29c1 tee: optee: check type of registered shared memory
+pick 80ec6f5de60b tee: shm: make function __tee_shm_alloc static
+pick c94f31b526fe tee: shm: don't put_page on null shm->pages
+pick 2490cdf6435b tee: shm: Potential NULL dereference calling tee_shm_register()
+
+# empty patch committed
+pick ded4c39e93f3 arm/arm64: smccc: Make function identifiers an unsigned quantity
+
+pick 7dd003aec201 correct max value for id allocation
+pick 6e112de04278 tee: optee: GET_OS_REVISION: document a2 as a build identifier
+pick 5c5f80307ab2 tee: optee: report OP-TEE revision information
+
+# empty patch committed
+pick bb765d1c331f tee: shm: fix use-after-free via temporarily dropped reference
+
+# empty patch committed
+pick ab9d3db5b320 tee: check shm references are consistent in offset/size
+
+pick cf89fe88a676 tee: replace getnstimeofday64() with ktime_get_real_ts64()
+pick 3249527f19d6 tee: optee: making OPTEE_SHM_NUM_PRIV_PAGES configurable via Kconfig
+pick db878f76b9ff tee: optee: take DT status property into account
+pick 25559c22cef8 tee: add kernel internal client interface
+pick b2d102bd0146 tee: optee: avoid possible double list_del()
+pick 3c15ddb97c77 tee: optee: log message if dynamic shm is enabled
+pick c7c0d8df0b94 tee: optee: add missing of_node_put after of_device_is_available
+pick 42bf4152d8a7 tee: add supp_nowait flag in tee_context struct
+
+# conflict - fixed
+pick 0fc1db9d1059 tee: add bus driver framework for TEE based devices
+
+pick c3fa24af9244 tee: optee: add TEE bus device enumeration support
+pick 50ceca6894ad tee: optee: Initialize some structs using memset instead of braces
+pick bb342f016862 tee: fix possible error pointer ctx dereferencing
+pick 62ade1bed27c tee: optee: Fix unsigned comparison with less than zero
+pick 4f062dc1b759 tee: add cancellation support to client interface
+pick 32356d309c22 tee: optee: update optee_msg.h and optee_smc.h to dual license
+pick 9733b072a12a optee: allow to work without static shared memory
+pick 9f02b8f61f29 tee: optee: add might_sleep for RPC requests
+
+# conflict - skipped - compat_ptr_ioctl does NOT exist yet
+pick 1832f2d8ff69 compat_ioctl: move more drivers to compat_ptr_ioctl
+
+pick a249dd200d03 tee: optee: Fix dynamic shm pool allocations
+pick 03212e347f94 tee: optee: fix device enumeration error handling
+pick 5a769f6ff439 optee: Fix multi page dynamic shm pool allocating
+pick 9e0caab8e0f9 tee: optee: Fix compilation issue with nommu
+
+# conflict - skipped - removal of unused function - just left it there
+pick 42aa7c6eb3eb drm/tee_shm: Drop dma_buf_k(unmap) support
+
+pick f349710e413a optee: model OP-TEE as a platform device/driver
+
+# removed
+pick 1a74fa3894e7 tee: allow compilation of tee subsystem for AMD CPUs
+pick 757cc3e9ff1d tee: add AMD-TEE driver
+pick bade7e1fbd34 tee: amdtee: check TEE status during driver initialization
+pick 5ae63958a6de tee: amdtee: remove unused variable initialization
+pick f4c58c3758f9 tee: amdtee: print error message if tee not present
+pick 2929015535fa tee: amdtee: skip tee_device_unregister if tee_device_alloc fails
+pick f9568eae9247 tee: amdtee: rename err label to err_device_unregister
+pick 279c075dc1d2 tee: amdtee: remove redundant NULL check for pool
+pick 872d92dec353 tee: amdtee: amdtee depends on CRYPTO_DEV_CCP_DD
+pick b83685bceedb tee: amdtee: fix memory leak in amdtee_open_session()
+pick 36fa3e50085e tee: amdtee: out of bounds read in find_session()
+
+pick 59a135f6fb66 tee: remove linked list of struct tee_shm
+pick c180f9bbe29a tee: remove unused tee_shm_priv_alloc()
+pick f1bbacedb0af tee: don't assign shm id for private shm_register
+pick 5271b2011e44 tee: remove redundant teedev in struct tee_shm
+pick 758ecf13a41a tee: tee_shm_op_mmap(): use TEE_SHM_USER_MAPPED
+pick 1115899e7aad tee: remove unnecessary NULL check in tee_shm_alloc()
+
+# conflict - fixed
+pick 2a6ba3f794e8 tee: enable support to register kernel memory
+
+pick 104edb94cc4b tee: add private login method for kernel clients
+
+# conflict - fixed
+pick e33bcbab16d1 tee: add support for session's client UUID generation
+
+pick c5b4312bea5d tee: optee: Add support for session login client UUID generation
+
+# conflict - fixed
+pick 60b4000f5464 tee: fix crypto select
+
+# BIG conflict - skipped
+pick d8ed45c5dcd4 mmap locking API: use coccinelle to convert mmap_sem rwsem call sites
+
+pick 58df195cd47d optee: use uuid for sysfs driver entry
+pick 5f178bb71e3a optee: enable support for multi-stage bus enumeration
+pick 9d5c773e6ff2250f39bff8b311127bf75ff3c39d tee: new ioctl to a register tee_shm from a dmabuf file descriptor
+pick 9f5731cfa0ce7bd049d0149d36c10e020972e61a OP-TEE Benchmark **not for mainline**
+pick 41e9290b04e0addda81c00413099493a70da4dbd tee: support of allocating DMA shared buffers **not for mainline**
+pick fa11127f89d77b4da33c1a804446d74232c6b951 staging/ion: add Allwinner ION "secure" heap
+pick 11ed7aed729224ebfe2dadb2672932995f4e6628 ion: "unmapped" heap for secure data path
+pick 366e674916bc6c88d83edc8a88908ec3e1085cf8 staging/ion: condition unmapped heap to supported architectures
+pick 05790c9df7e4f800024580c37edcb85e992082e6 staging/ion: ARM64 supports ION_UNMAPPED_HEAP
+
+# conflict - fixed
+pick 6af0afc0fbbeb0fe5a1dc5ae01bb19a5caf8d656 staging:ion: add a no-map property to ion dmabuf attachment
+
+# conflict - fixed
+pick 816b96777488ac5bf3c2ef50a1210a2eb31606ec staging: android: ion: do not clear dma_address of unmapped heap
+
+pick 185d7548c96847b52481e7920cc46d5250835cfd driver: tee: Handle NULL pointer indication from client
+pick a1f8ac03637d0808053975d4870375b084d6ed7c tee: client UUID: Skip REE kernel login method as well
+
+# conflict - skipped
+pick 28676a5aba66dc983023ac3bea45e2aa9a06f5ce checkpatch: add --kconfig-prefix
