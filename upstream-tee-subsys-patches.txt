@@ -1,0 +1,158 @@
+original f optee_android_manifest 3.4 release
+
+7edc44ec5289 (m/android-9.0.0_r30) Merge changes Ic7ce3dde,I3a9998d4 into android-hikey-linaro-4.14
+7f5e1e75938e Revert "drm/hisilicon: Ensure LDI regs are properly configured."
+256f07b4dc5a adv7511: Add more modes to HiKey whitelist
+714759b655e5 hikey: Enable OPTEE in defconfig
+39b8b68d61d9 hikey_defconfig: enable dummy ION memory in kernel config
+
+4d91c112b7d6 tee: flexible shared memory pool creation
+34369944c4e2 tee: add register user memory
+89b5b3848592 tee: use reference counting for tee_context
+14c63582d03e tee: new ioctl to a register tee_shm from a dmabuf file descriptor
+44b0468decad tee: optee: Update protocol definitions
+c4c09007fe55 tee: optee: store OP-TEE capabilities in private data
+3fd5bdc31d73 staging/ion: add Allwinner ION "secure" heap
+d40757eb549d ion: "unmapped" heap for secure data path
+b1e3c42a48cf staging/ion: condition unmapped heap to supported architectures
+7e3cf3ff018b staging/ion: ARM64 supports ION_UNMAPPED_HEAP
+fcd747efa152 staging:ion: add a no-map property to ion dmabuf attachment
+50655502bf6b tee: optee: log message if dynamic shm is enabled
+6e1bf2a29dae (HEAD) tee: fix unbalanced context refcount in register shm from fd
+
+===================
+
+lswg branch-optee-v4.12-20180906
+
+# skipped - in tree
+aea09b82e746 [v4.14] tee: optee: fix uninitialized symbol 'parg'
+371a714a96a5 [v4.14] tee: add forward declaration for struct device
+2cecc2507401 [v4.14] tee: tee_shm: Constify dma_buf_ops structures.
+8830318586cb [v4.14] tee: optee: add const to tee_driver_ops and tee_desc structures
+dbc1a44647b2 [v4.14] tee: optee: interruptible RPC sleep
+dec5f33f17d2 [v4.14] tee: indicate privileged dev in gen_caps
+481ebd2dab1a [v4.14] tee: optee: sync with new naming of interrupts
+cb4b3c074085 [v4.15] optee: fix invalid of_node_put() in optee_driver_init()
+
+# cherry picked
+ca554c6840bd [v4.16] tee: add tee_param_is_memref() for driver use
+e7f9de62a1e0 [v4.16] tee: add TEE_IOCTL_PARAM_ATTR_META
+acd2bedd7943 [v4.16] optee: support asynchronous supplicant requests
+
+# patch xist in optee_android_manifest 3.4 release
+fabaadfddf7a [v4.16] tee: flexible shared memory pool creation
+1ee91892b73e [v4.16] tee: add register user memory
+
+# cherry picked
+d5cb8b6d1150 [v4.16] tee: shm: add accessors for buffer size and page offset
+b641b08c4de6 [v4.16] tee: shm: add page accessor functions
+
+# patch xist in optee_android_manifest 3.4 release but after "tee: new ioctl to a register tee_shm from a dmabuf file descriptor"
+229153c92b8f [v4.16] tee: optee: Update protocol definitions
+
+# cherry picked
+0390364b72c9 [v4.16] tee: optee: add page list manipulation functions
+c9b5a0e50a64 [v4.16] tee: optee: add shared buffer registration functions
+fda1b53b8654 [v4.16] tee: optee: add registered shared parameters handling
+7357af43c342 [v4.16] tee: optee: add registered buffers handling into RPC calls
+
+# patch xist in optee_android_manifest 3.4 release but after "tee: optee: Update protocol definitions"
+a2f3da632988 [v4.16] tee: optee: store OP-TEE capabilities in private data
+
+# cherry picked
+7cb2a5d1cd46 [v4.16] tee: optee: add optee-specific shared pool implementation
+69afa66ef768 [v4.16] tee: optee: enable dynamic SHM support
+
+# patch xist in optee_android_manifest 3.4 release
+0987f080c0bb [v4.16] tee: use reference counting for tee_context
+
+# cherry picked
+e45427575527 [v4.16] tee: shm: inline tee_shm_get_id()
+fd76ad99af2f [v4.16] tee: optee: fix header dependencies
+ab4a37e152d8 [v4.16] tee: add start argument to shm_register callback
+130df4991978 [v4.16] tee: optee: check type of registered shared memory
+1be3dd5de0c5 [v4.16] tee: shm: make function __tee_shm_alloc static
+d02a71b3b277 [v4.16] tee: shm: don't put_page on null shm->pages
+60647706a9e2 [v4.16] tee: shm: Potential NULL dereference calling tee_shm_register()
+
+# skipped - in tree
+6434551b80fc [v4.16] arm/arm64: smccc: Make function identifiers an unsigned quantity
+
+# skipped
+26cc3f46d478 Add upstream-tee-subsys-patches.txt
+
+# cherry picked
+9762697a7e0c tee: add kernel internal client interface
+
+# patch xist in optee_android_manifest 3.4 release
+28f2ad9c4230 tee: new ioctl to a register tee_shm from a dmabuf file descriptor
+
+# cherry picked
+b447ecb6e78e OP-TEE Benchmark **not for mainline**
+9f9806e01ee7 tee: optee: optee_bench.h: remove useless include **not for mainline**
+
+# patch xist in optee_android_manifest 3.4 release
+1af7f7907fd4 staging/ion: add Allwinner ION "secure" heap
+ffcd4cc22e27 ion: "unmapped" heap for secure data path
+ee589e6a4688 staging/ion: condition unmapped heap to supported architectures
+16843e5f398a staging/ion: ARM64 supports ION_UNMAPPED_HEAP
+0b488c9833c8 staging:ion: add a no-map property to ion dmabuf attachment
+
+# cherry picked
+5f263e998141 tee: correct max value for id allocation
+886746b9b48f tee: optee: GET_OS_REVISION: document a2 as a build identifier
+bfbafe030829 tee: optee: report OP-TEE revision information
+
+# patch xist in optee_android_manifest 3.4 release
+3ed4ce4c37ef tee: optee: log message if dynamic shm is enabled
+94c2f2e1cb08 tee: fix unbalanced context refcount in register shm from fd
+
+# skipped - in tree
+f5d5641b90b3 optee: check shm reference are consistent in offset/size
+
+# cherry picked
+0c23453b3dcc tee: support of allocating DMA shared buffers **not for mainline**
+ece5ba232a4e tee: support of allocating DMA shared buffers **not for mainline**
+
+#############
+# final list
+#############
+pick ca554c6840bd [v4.16] tee: add tee_param_is_memref() for driver use
+pick e7f9de62a1e0 [v4.16] tee: add TEE_IOCTL_PARAM_ATTR_META
+pick acd2bedd7943 [v4.16] optee: support asynchronous supplicant requests
+pick 4d91c112b7d6 tee: flexible shared memory pool creation
+pick 34369944c4e2 tee: add register user memory
+pick d5cb8b6d1150 [v4.16] tee: shm: add accessors for buffer size and page offset
+pick b641b08c4de6 [v4.16] tee: shm: add page accessor functions
+pick 0390364b72c9 [v4.16] tee: optee: add page list manipulation functions
+pick c9b5a0e50a64 [v4.16] tee: optee: add shared buffer registration functions
+pick fda1b53b8654 [v4.16] tee: optee: add registered shared parameters handling
+pick 7357af43c342 [v4.16] tee: optee: add registered buffers handling into RPC calls
+pick 7cb2a5d1cd46 [v4.16] tee: optee: add optee-specific shared pool implementation
+pick 69afa66ef768 [v4.16] tee: optee: enable dynamic SHM support
+pick 89b5b3848592 tee: use reference counting for tee_context
+pick e45427575527 [v4.16] tee: shm: inline tee_shm_get_id()
+pick fd76ad99af2f [v4.16] tee: optee: fix header dependencies
+pick ab4a37e152d8 [v4.16] tee: add start argument to shm_register callback
+pick 130df4991978 [v4.16] tee: optee: check type of registered shared memory
+pick 1be3dd5de0c5 [v4.16] tee: shm: make function __tee_shm_alloc static
+pick d02a71b3b277 [v4.16] tee: shm: don't put_page on null shm->pages
+pick 60647706a9e2 [v4.16] tee: shm: Potential NULL dereference calling tee_shm_register()
+pick 9762697a7e0c tee: add kernel internal client interface
+pick 14c63582d03e tee: new ioctl to a register tee_shm from a dmabuf file descriptor
+pick 44b0468decad tee: optee: Update protocol definitions
+pick c4c09007fe55 tee: optee: store OP-TEE capabilities in private data
+pick b447ecb6e78e OP-TEE Benchmark **not for mainline**
+pick 9f9806e01ee7 tee: optee: optee_bench.h: remove useless include **not for mainline**
+pick 3fd5bdc31d73 staging/ion: add Allwinner ION "secure" heap
+pick d40757eb549d ion: "unmapped" heap for secure data path
+pick b1e3c42a48cf staging/ion: condition unmapped heap to supported architectures
+pick 7e3cf3ff018b staging/ion: ARM64 supports ION_UNMAPPED_HEAP
+pick fcd747efa152 staging:ion: add a no-map property to ion dmabuf attachment
+pick 5f263e998141 tee: correct max value for id allocation
+pick 886746b9b48f tee: optee: GET_OS_REVISION: document a2 as a build identifier
+pick bfbafe030829 tee: optee: report OP-TEE revision information
+pick 50655502bf6b tee: optee: log message if dynamic shm is enabled
+pick 6e1bf2a29dae tee: fix unbalanced context refcount in register shm from fd
+pick 0c23453b3dcc tee: support of allocating DMA shared buffers **not for mainline**
+pick ece5ba232a4e tee: support of allocating DMA shared buffers **not for mainline**
