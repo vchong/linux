@@ -374,7 +374,3 @@
 &usbphyc {
 	status = "okay";
 };
-
-&optee {
-	status = "okay";
-};
