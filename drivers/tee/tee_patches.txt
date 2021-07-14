@@ -1,0 +1,84 @@
+# rebased on top of
+# a8a3f83e52b6 ANDROID: trusty_qemu_defconfig: Enable dma-buf and ion system heaps
+
+add tee_patches.txt
+# fr tt2
+7b27a2c1181b32fafd28b13b988d8c95043e903e trusty_qemu_defconfig: add OP-TEE configs
+
+undefined            eaf4c568a9e3 tee: support of allocating DMA shared buffers **not for mainline**
+undefined            d9b0331b4654 OP-TEE Benchmark **not for mainline**
+undefined            74f8b1e5069f tee: new ioctl to a register tee_shm from a dmabuf file descriptor
+[v5.14-rc5]          376e4199e327 tee: Correct inappropriate usage of TEE_SHM_DMA_BUF flag
+[v5.14-rc5]          dc7019b7d0e1 tee: add tee_shm_alloc_kernel_buf()
+[v5.14-rc5]          b5c10dd04b74 optee: Clear stale cache entries during initialization
+[v5.14-rc5]          f25889f93184 optee: fix tee out of memory failure seen during kexec reboot
+[v5.14-rc5]          adf752af454e optee: Refuse to load the driver under the kdump kernel
+[v5.14-rc5]          ec185dd3ab25 optee: Fix memory leak when failing to register shm pages
+[v5.13-rc5]          673c7aa2436b optee: use export_uuid() to copy client UUID
+[v5.14-rc1]          963cdcc37e98 tee: Fix fall-through warnings for Clang
+[v5.13-rc3]          9f015b3765bf tee: amdtee: unload TA only when its refcount becomes 0
+[v5.13-rc1]          c650b8dc7a79 tee: optee: do not check memref size on return from Secure World
+[v5.13-rc1]          7ccdcaace808 tee: optee: fix build error caused by recent optee tracepoints feature
+[v5.12-rc4]          6417f03132a6 module: remove never implemented MODULE_SUPPORTED_DEVICE
+[v5.13-rc1]          0101947dbcc3 tee: optee: add invoke_fn tracepoints
+[v5.12-rc1-dontuse]  958567600517 tee: optee: remove need_resched() before cond_resched()
+
+# use commit fr tt2, i.e. 9530fa2a958f
+# the one below causes build error
+[v5.12-rc1-dontuse]  617d8e8b347e optee: sync OP-TEE headers
+
+[v5.12-rc1-dontuse]  bed13b5fc4f3 tee: optee: fix 'physical' typos
+[v5.12-rc1-dontuse]  fda90b29e271 drivers: optee: use flexible-array member instead of zero-length array
+
+# NO - build errors
+#[v5.11-rc1]          a24d22b225ce crypto: sha - split sha.h into sha1.h and sha2.h
+
+[v5.11-rc1]          57222a1be27e tee: optee: Use UUID API for exporting the UUID
+
+pick 57222a1be27e
+pick fda90b29e271
+pick bed13b5fc4f3
+pick 9530fa2a958f
+pick 958567600517
+pick 0101947dbcc3
+pick 6417f03132a6
+pick 7ccdcaace808
+pick c650b8dc7a79
+pick 9f015b3765bf
+pick 963cdcc37e98
+pick 673c7aa2436b
+pick ec185dd3ab25
+pick adf752af454e
+pick f25889f93184
+pick b5c10dd04b74
+pick dc7019b7d0e1
+pick 376e4199e327
+pick 74f8b1e5069f
+pick d9b0331b4654
+pick eaf4c568a9e3
+pick 7b27a2c1181b32fafd28b13b988d8c95043e903e
+pick add tee_patches.txt
+
+57222a1be27e
+fda90b29e271
+bed13b5fc4f3
+9530fa2a958f
+958567600517
+0101947dbcc3
+6417f03132a6
+7ccdcaace808
+c650b8dc7a79
+9f015b3765bf
+963cdcc37e98
+673c7aa2436b
+ec185dd3ab25
+adf752af454e
+f25889f93184
+b5c10dd04b74
+dc7019b7d0e1
+376e4199e327
+74f8b1e5069f
+d9b0331b4654
+eaf4c568a9e3
+7b27a2c1181b32fafd28b13b988d8c95043e903e
+add tee_patches.txt
