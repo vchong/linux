@@ -1,0 +1,28 @@
+# rebased on top of
+# a8a3f83e52b6 ANDROID: trusty_qemu_defconfig: Enable dma-buf and ion system heaps
+
+pick e028d41c19ea drivers: optee: use flexible-array member instead of zero-length array
+pick 6e0cdd9e2ef9 tee: optee: fix 'physical' typos
+
+# merge conflicts due to 67bc80975279 being picked earlier in this tree
+# instead of later in the upstream tree
+# conflicts resolved
+pick 617d8e8b347e optee: sync OP-TEE headers
+
+# this is the resolved patch - use this instead?
+#pick 9530fa2a958f optee: sync OP-TEE headers
+
+pick 958567600517 tee: optee: remove need_resched() before cond_resched()
+
+# already exist in tree - pick 67bc80975279 optee: simplify i2c access
+
+pick 0101947dbcc3 tee: optee: add invoke_fn tracepoints
+pick 6417f03132a6 module: remove never implemented MODULE_SUPPORTED_DEVICE
+pick 7ccdcaace808 tee: optee: fix build error caused by recent optee tracepoints feature
+pick c650b8dc7a79 tee: optee: do not check memref size on return from Secure World
+pick 9f015b3765bf tee: amdtee: unload TA only when its refcount becomes 0
+pick 673c7aa2436b optee: use export_uuid() to copy client UUID
+pick a2e61ce27142 tee: new ioctl to a register tee_shm from a dmabuf file descriptor
+pick 217d63aae5cb OP-TEE Benchmark **not for mainline**
+pick 2248447501b0 tee: support of allocating DMA shared buffers **not for mainline**
+pick fe262018fcdc trusty_qemu_defconfig: add OP-TEE configs
